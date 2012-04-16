@@ -1,0 +1,46 @@
+This is the temporary location of the Simple API for JPEG 2000 project
+
+The aim of this project is to provide an API for application programmer to
+quickly retrieve meta information about a JP2 file or a J2K codestream.
+
+In the longer term this project will be merged into OpenJPEG project itself.
+
+It only compiles on GNU/Linux so far. Once merged into OpenJPEG it will
+automagically be made portable
+
+Compilation:
+
+$ cmake .
+$ make
+
+How to use:
+
+$ ./jpegdump input.j2k > ref1
+
+Compare with our own
+
+$ ./d3tdump input.j2k > ref2
+
+$ vimdiff ref1 ref2
+
+
+If you have access to PIRL java package:
+
+$ wget ftp://pirlftp.lpl.arizona.edu/pub/Java/PIRL.jar
+
+for jp2 file, use:
+
+$ java -classpath PIRL.jar PIRL.Image_Tools.JP2_Info input.jp2 > ref1
+
+or (for J2K):
+
+$ java -classpath PIRL.jar PIRL.Image_Tools.JPEG2000_Codestream_Info input.j2k > ref1
+
+now compare:
+
+$ ./pirldump input.j2k > ref2
+
+$ vimdiff ref1 ref2
+
+
+-- Mathieu Malaterre
