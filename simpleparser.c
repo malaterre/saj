@@ -132,6 +132,10 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun )
         v = fseeko( stream, -8, SEEK_CUR );
         assert( v == 0 );
         }
+      else
+        {
+        sotlen -= (lenmarker+4);
+        }
       }
     else
       {

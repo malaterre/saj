@@ -42,34 +42,39 @@ typedef enum {
   COLR = 0x636f6c72
 } OtherType;
 
-/* List of well known markers */
+/* Table A.2 List of markers and marker segments */
 typedef enum {
   SOC = 0xFF4F,
   SIZ = 0xFF51,
   COD = 0xFF52,
   COC = 0xFF53,
   TLM = 0xFF55,
+  PLM = 0XFF57,
+  PLT = 0XFF58,
   QCD = 0xFF5C,
   QCC = 0xFF5D,
   RGN = 0xFF5E,
   POC = 0xFF5F,
+  PPM = 0XFF60,
+  PPT = 0XFF61,
   CRG = 0xFF63,
   COM = 0xFF64,
   SOT = 0xFF90,
   SOP = 0xFF91,
+  EPH = 0XFF92,
   SOD = 0xFF93,
   EOC = 0XFFD9, /* EOI in old jpeg */
-  PLM = 0XFF57,
-  PLT = 0XFF58,
-  PPM = 0XFF60,
-  PPT = 0XFF61,
-  EPH = 0XFF92
 } MarkerType;
 
 /**
  * Function param that will be used to print an element (marker + len + data)
  * when this function return true this is the default behavior and the simple
  * parser will default to skipping `len` bytes. If returning false
+ * The file `stream` is left open right after the length of the marker (or the
+ * maker itself when no length).
+ *
+ * The function does not take as input a MarkerType, but a uint16_t as we could
+ * see application specific marker.
  */
 typedef bool (*PrintFunctionJ2K)( uint_fast16_t marker, size_t len, FILE* stream );
 
