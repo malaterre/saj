@@ -887,7 +887,7 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
     }
 
   bool skip = false;
-  assert( len >= 8 );
+  assert( len >= 8 || (marker == JP2C && len == 0 ) );
   switch( marker )
     {
   case JP:
