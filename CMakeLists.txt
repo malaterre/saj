@@ -10,3 +10,4 @@ include_directories(
   )
 add_executable(d3tdump d3t_dump.c simpleparser.c)
 add_executable(pirldump pirl_dump.c simpleparser.c)
+add_executable(avdump av_dump.c simpleparser.c)

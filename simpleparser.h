@@ -39,11 +39,31 @@ typedef enum {
   JP2C = 0x6a703263,
   JP2  = 0x6a703220,
   IHDR = 0x69686472,
-  COLR = 0x636f6c72
+  COLR = 0x636f6c72,
+  XML  = 0x786d6c20,
+  CDEF = 0x63646566,
+  CMAP = 0x636D6170,
+  PCLR = 0x70636c72
 } OtherType;
 
 /* Table A.2 List of markers and marker segments */
 typedef enum {
+  FF30 = 0xFF30,
+  FF31 = 0xFF31,
+  FF32 = 0xFF32,
+  FF33 = 0xFF33,
+  FF34 = 0xFF34,
+  FF35 = 0xFF35,
+  FF36 = 0xFF36,
+  FF37 = 0xFF37,
+  FF38 = 0xFF38,
+  FF39 = 0xFF39,
+  FF3A = 0xFF3A,
+  FF3B = 0xFF3B,
+  FF3C = 0xFF3C,
+  FF3D = 0xFF3D,
+  FF3E = 0xFF3E,
+  FF3F = 0xFF3F,
   SOC = 0xFF4F,
   SIZ = 0xFF51,
   COD = 0xFF52,
@@ -96,7 +116,7 @@ bool parsej2k( const char *filename, PrintFunctionJ2K fj2k );
 bool parsejp2( const char *filename, PrintFunctionJP2 fjp2, PrintFunctionJ2K fj2k );
 
 /**
- * Return whether or not a marker has a fixed length
+ * Return whether or not a marker has no length
  */
 bool hasnolength( uint_fast16_t marker );
 

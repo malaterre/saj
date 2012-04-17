@@ -29,6 +29,7 @@ static const dictentry2 dict2[] = {
   { JP2H, "jp2h", "JP2_Header" },
   { JP2C, "jp2c", "Contiguous_Codestream" },
   { JP2 , "jp2" , "" },
+  { XML , "xml ", "XML box" },
   { IHDR, "ihdr", "Image_Header" },
   { COLR, "colr", "Colour_Specification" },
 
@@ -373,23 +374,27 @@ static const char * getbrand( uint_fast32_t br )
 }
 
 /* I.5.2 File Type box */
-static void printfiletype( FILE * stream )
+static void printfiletype( FILE * stream, size_t len )
 {
   uint32_t br;
   uint32_t minv;
   uint32_t cl;
-  bool b = read32(stream, &br);
-  assert( b );
-  b = read32(stream, &minv);
-  assert( b );
-  b = read32(stream, &cl);
-  assert( b );
+  bool b = read32(stream, &br); assert( b );
+  b = read32(stream, &minv); assert( b );
+
+  /* The number of CLi fields is determined by the length of this box. */
+  int n = (len - 8 ) / 4;
 
   /* Table I.3 - Legal Brand values */
   const char *brand = getbrand( br );
   printstring("\t\tBrand = ", brand );
   printf("\t\tMinor_Version = %u\n", minv );
-  printf("\t\tCompatibility = \n\t\t\t{\"%s \"}\n", brand );
+  int i;
+  for (i = 0; i < n; ++i )
+    {
+    b = read32(stream, &cl); assert( b );
+    printf("\t\tCompatibility = \n\t\t\t{\"%s \"}\n", brand );
+    }
 }
 
 /* I.5.3.1 Image Header box */
@@ -440,9 +445,18 @@ static void printcolourspec( FILE *stream, size_t len )
   b = read8(stream, &meth); assert( b );
   b = read8(stream, &prec); assert( b );
   b = read8(stream, &approx); assert( b );
-  if( len == 7 )
+  if( meth != 2 )
     {
+    assert( len == 7 );
     b = read32(stream, &enumCS); assert( b );
+  len-=4;
+    }
+  len--;
+  len--;
+  len--;
+  if( len != 0 )
+    {
+  int v = fseeko(stream, (off_t)len, SEEK_CUR);
     }
  
   printf("\t\t\tSpecification_Method = %u\n", meth);
@@ -497,16 +511,16 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
 	printf("\t\t^Position = %td <byte offset>\n", offset - 8 );
 	printf("\t\tLength = %zd <bytes>\n", len );
   bool skip = false;
+  assert( len >= 8 );
   switch( marker )
     {
   case JP:
     printsignature( stream );
     break;
   case FTYP:
-    printfiletype( stream );
+    printfiletype( stream, len - 8 );
     break;
   case JP2H:
-    assert( len >= 8 );
     printheaderbox( stream, len - 8 );
     break;
   case JP2C:
@@ -668,13 +682,15 @@ int main(int argc, char *argv[])
   bool isjp2 = isjp2file( filename );
   if( isjp2 )
     {
-    printf("%c",c);
+/* Compat with PIRL 2.3.4 */
+/*    printf("%c",c);
     printf(">>> WARNING <<< Incomplete JPEG2000 codestream.");
     printf("%c",c);
     printf("%c",c);
     printf("    End of Codestream marker not found.");
     printf("%c",c);
     printf("%c",c);
+*/
     }
   printf("GROUP = %s", fullpath);
   free( fullpath );

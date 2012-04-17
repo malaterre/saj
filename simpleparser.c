@@ -37,13 +37,26 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-/* HACK */
-uintmax_t file_size;
-
 bool hasnolength( uint_fast16_t marker )
 {
   switch( marker )
     {
+  case FF30:
+  case FF31:
+  case FF32:
+  case FF33:
+  case FF34:
+  case FF35:
+  case FF36:
+  case FF37:
+  case FF38:
+  case FF39:
+  case FF3A:
+  case FF3B:
+  case FF3C:
+  case FF3D:
+  case FF3E:
+  case FF3F:
   case SOC:
   case SOD:
   case EOC:
@@ -93,7 +106,7 @@ static uint32_t readsot( const char *a, size_t l )
   return s.Psot;
 }
 
-static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun )
+static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t file_size )
 {
   uint16_t marker;
   uint32_t sotlen = 1;
@@ -134,6 +147,7 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun )
         }
       else
         {
+        /* remove size of -say- qcd item for our book keeping */
         sotlen -= (lenmarker+4);
         }
       }
@@ -143,7 +157,7 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun )
       /* marker has no lenght but we know how much to skip */
       if( marker == SOD )
         {
-        assert( sotlen > 14 );
+        assert( sotlen >= 14 );
         lenmarker = sotlen - 14;
         }
       }
@@ -172,7 +186,7 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
     assert( b );
     if( marker == JP2C )
       {
-      assert( len == 0 );
+      //assert( len == 0 );
       if( printfun2( marker, len, stream ) )
         {
         bool bb = parsej2k_imp( stream, printfun );
@@ -198,12 +212,13 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
 bool parsej2k( const char *filename, PrintFunctionJP2 printfun )
 {
   FILE *stream;
+  uintmax_t file_size;
 
   file_size = getfilesize( filename );
   stream = fopen( filename, "rb" );
   assert( stream );
 
-  return parsej2k_imp( stream, printfun );
+  return parsej2k_imp( stream, printfun, file_size );
 }
 
 bool isjp2file( const char *filename )
