@@ -43,7 +43,9 @@ typedef enum {
   XML  = 0x786d6c20,
   CDEF = 0x63646566,
   CMAP = 0x636D6170,
-  PCLR = 0x70636c72
+  PCLR = 0x70636c72,
+  /* JPIP */
+  IPTR = 0x69707472
 } OtherType;
 
 /* Table A.2 List of markers and marker segments */

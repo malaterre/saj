@@ -444,10 +444,25 @@ static void printcoc( FILE *stream, size_t len )
   assert( xcb + ycb <= 12 );
   uint8_t CodeBlockStyle = *p++;
   uint8_t Transformation = *p++;
-  assert( p == end );
 
   /* Table A.19 - Code-block style for the SPcod and SPcoc parameters */
   bool SelectiveArithmeticCodingBypass                 = (CodeBlockStyle & 0x01) != 0;
+  if( !SelectiveArithmeticCodingBypass )
+    {
+    /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
+    uint_fast8_t i;
+    uint8_t n = *p++;
+    for( i = 0; i < NumberOfDecompositionLevels; ++i )
+      {
+      *p++;
+      }
+    assert( p == end );
+    }
+  else
+    {
+    assert( !NumberOfDecompositionLevels );
+    }
+  assert( p == end );
   bool ResetContextProbabilitiesOnCodingPassBoundaries = (CodeBlockStyle & 0x02) != 0;
   bool TerminationOnEachCodingPass                     = (CodeBlockStyle & 0x04) != 0;
   bool VerticallyCausalContext                         = (CodeBlockStyle & 0x08) != 0;

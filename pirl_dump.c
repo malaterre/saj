@@ -32,6 +32,7 @@ static const dictentry2 dict2[] = {
   { XML , "xml ", "XML box" },
   { IHDR, "ihdr", "Image_Header" },
   { COLR, "colr", "Colour_Specification" },
+//  { IPTR, "iptr", "Unknown" }, /* FIXME */
 
   { 0, 0, 0 }
 };
@@ -136,7 +137,7 @@ static const char *getDescriptionOfProgressionOrderString(uint8_t progressionOrd
       descriptionOfProgressionOrder = "Resolution level-layer-component-position";
       break;
     case 0x02:
-      descriptionOfProgressionOrder = "Resolution level-position-component-layer";
+      descriptionOfProgressionOrder = "Resolution-Position-Component-Layer";
       break;
     case 0x03:
       descriptionOfProgressionOrder = "Position-component-resolution level-layer";
@@ -225,7 +226,8 @@ static void printcod( FILE *stream, size_t len )
   union { uint16_t v; char bytes[2]; } u16;
 
 /* Table A.12 - Coding style default parameter values */
-  uint8_t *p = (uint8_t*)buffer;
+  const uint8_t *p = (uint8_t*)buffer;
+  const uint8_t *end = p + len;
   uint8_t Scod = *p++;
   uint8_t ProgressionOrder = *p++;
   u16.bytes[0] = (char)*p++;
@@ -242,7 +244,7 @@ static void printcod( FILE *stream, size_t len )
   const char * sProgressionOrder = getDescriptionOfProgressionOrderString(ProgressionOrder);
   const char * sTransformation = getDescriptionOfWaveletTransformationString(Transformation);
 
-#if 0
+#if 1
   /* Table A.13 Coding style parameter values for the Scod parameter */
   bool VariablePrecinctSize = (Scod & 0x01) != 0;
   bool SOPMarkerSegments    = (Scod & 0x02) != 0;
@@ -274,11 +276,11 @@ static void printcod( FILE *stream, size_t len )
   printf( "\t\t\t\t/*\n" );
   printf( "\t\t\t\t    Code-block width exponent offset %u.\n", CodeBlockWidth );
   printf( "\t\t\t\t*/\n" );
-  printf( "\t\t\t\tCode_Block_Width = %u\n", CodeBlockWidth );
+  printf( "\t\t\t\tCode_Block_Width = %u\n", 1 << CodeBlockWidth+2 );
   printf( "\t\t\t\t/*\n" );
   printf( "\t\t\t\t    Code-block height exponent offset %u.\n", CodeBlockHeight );
   printf( "\t\t\t\t*/\n" );
-  printf( "\t\t\t\tCode_Block_Height = %u\n", CodeBlockHeight );
+  printf( "\t\t\t\tCode_Block_Height = %u\n", 1 << CodeBlockHeight+2 );
   printf( "\t\t\t\t/*\n" );
 
 #if 0
@@ -307,6 +309,29 @@ static void printcod( FILE *stream, size_t len )
   printf( "\t\t\t\t*/\n" );
   printf( "\t\t\t\tTransform = %u\n", Transformation );
 
+  if( VariablePrecinctSize )
+    {
+    uint8_t N = *p++;
+    uint_fast8_t i;
+    printf( "\t\t\t\t/*\n" );
+    printf( "\t\t\t\tPrecinct (width, height) by resolution level.\n" );
+    printf( "\t\t\t\t*/\n" );
+    printf( "\t\t\t\tPrecinct_Size = \n", ProgressionOrder, sProgressionOrder );
+    printf( "\t\t\t\t(\n" );
+    for( i = 0; i < NumberOfDecompositionLevels; ++i )
+      {
+      uint8_t val = *p++;
+      /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
+      uint8_t width = val & 0x0f;
+      uint8_t height = val >> 4;
+      printf( "\t\t\t\t\t(%u, %u)", 1 << width, 1 << height );
+      if( i == NumberOfDecompositionLevels )
+        printf( ")\n" );
+      else
+        printf( ",\n" );
+      }
+    }
+
 #if 0
   printf( "\t\tProgressionOrder = 0x%x (%s progression)\n", ProgressionOrder, sProgressionOrder );
   printf( "\t\tNumberOfLayers = %u\n", NumberOfLayers );
@@ -325,6 +350,7 @@ static void printcod( FILE *stream, size_t len )
   printf( "\t\tWaveletTransformation = 0x%x (%s)\n", Transformation, sTransformation );
   printf( "\n" );
 #endif
+  assert( p == end );
 }
 
 static void printstring( const char *in, const char *ref )
@@ -424,7 +450,7 @@ static void printimageheaderbox( FILE * stream , size_t fulllen )
   printf("\t\t\t/*\n\t\t\t    Negative bits indicate signed values of abs (bits);\n");
   printf("\t\t\t      Zero bits indicate variable number of bits.\n");
   printf("\t\t\t*/\n");
-  printf("\t\t\tValue_Bits = %u\n", bpc + 1);
+  printf("\t\t\tValue_Bits = \n", bpc + 1);
   printf("\t\t\t\t(%u)\n", bpc + 1);
   printf("\t\t\tCompression_Type = %u\n", c);
   printf("\t\t\tColorspace_Unknown = %s\n", Unk ? "true" : "false");
@@ -505,11 +531,29 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
 {
   off_t offset = ftello(stream);
   const dictentry2 *d = getdictentry2frommarker( marker );
-  printstring( "\tGROUP = ", d->shortname );
-	printf("\t\tName = %s\n", d->longname );
+  if( d->shortname )
+    {
+    printstring( "\tGROUP = ", d->shortname );
+    printf("\t\tName = %s\n", d->longname );
+    }
+  else
+    {
+    char buffer[4+1];
+    uint32_t swap = bswap_32( marker );
+    memcpy( buffer, &swap, 4);
+    buffer[4] = 0;
+    printstring( "\tGROUP = ", buffer );
+    printf("\t\tName = %s\n", "Unknown" );
+
+    }
 	printf("\t\tType = 16#%X#\n", (uint32_t)marker );
 	printf("\t\t^Position = %td <byte offset>\n", offset - 8 );
 	printf("\t\tLength = %zd <bytes>\n", len );
+  if( !d->shortname )
+    {
+    printf("\t\t^Data_Position = %zd <byte offset>\n", offset );
+    printf("\t\tData_Length = %zd <bytes>\n", len - 8 );
+    }
   bool skip = false;
   assert( len >= 8 );
   switch( marker )
@@ -524,8 +568,8 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
     printheaderbox( stream, len - 8 );
     break;
   case JP2C:
-    printf("\t\t^Data_Position = %zd <byte offset>\n", len );
-    printf("\t\tData_Length = %zd <bytes>\n", len );
+    printf("\t\t^Data_Position = %zd <byte offset>\n", offset );
+    printf("\t\tData_Length = %zd <bytes>\n", len - 8 );
     printf("\t\tGROUP = Codestream\n" );
   default:
     skip = true;
@@ -642,7 +686,19 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
   const dictentry *d = getdictentryfrommarker( marker );
   assert( offset >= 0 );
 
-  printstring( "\t\t\tGROUP = ", d->longname );
+  if( d->longname )
+    {
+    printstring( "\t\t\tGROUP = ", d->longname );
+    }
+  else
+    {
+    char buffer[4+1];
+    uint32_t swap = bswap_32( marker );
+    memcpy( buffer, &swap, 4);
+    buffer[4] = 0;
+    printstring( "\t\t\tGROUP = ", buffer );
+assert( 0 );
+    }
 	printf("\t\t\t\tMarker = 16#%X#\n", (uint16_t)marker );
 	printf("\t\t\t\t^Position = %td <byte offset>\n", offset );
 	printf("\t\t\t\tLength = %zd <bytes>\n", len );
@@ -661,6 +717,7 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
   case COD:
     printcod( stream, len );
     break;
+  case EOC:
   default:
     skip = true;
     }
