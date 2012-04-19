@@ -194,7 +194,7 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
       const off_t start = ftello(stream);
       if( printfun2( marker, len, stream ) )
         {
-        assert( len - 8 < file_size ); /* jpeg codestream can be longer than jp2 file */
+        assert( len - 8 < file_size ); /* jpeg codestream cant be longer than jp2 file */
         bool bb = parsej2k_imp( stream, printfun, len - 8 /*file_size*/ );
         assert ( bb );
         }
@@ -207,7 +207,7 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
     assert( len >= 8 );
     if( printfun2( marker, len, stream ) )
       {
-      const size_t lenmarker = len - 4 - 4;
+      const size_t lenmarker = len - 8;
       int v = fseeko(stream, (off_t)lenmarker, SEEK_CUR);
       assert( v == 0 );
       }

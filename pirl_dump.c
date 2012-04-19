@@ -11,6 +11,13 @@
 
 #include <simpleparser.h>
 
+/*
+Options -
+  -[No_]Tiles
+    Tiles segment parameters are to be included (or not).
+    The default is not to include tile segment parameters.  */
+static bool printtiles = false;
+
 typedef struct {
   uint16_t marker;
   const char* shortname;
@@ -60,12 +67,12 @@ static const dictentry2 * getdictentry2frommarker( uint_fast32_t marker )
 
 static const dictentry dict[] = {
   { SOC, "Codestream", "Start_of_Codestream" },
-  { SOT, "SOT", "Start of tile-part" },
+  { SOT, "SOT", "Start_of_Tile_Part" },
   { SOD, "SOD", "Start of data" },
   { EOC, "EOC", "End of codestream" },
   { SIZ, "SIZ", "Size" },
   { COD, "COD", "Coding_Style_Default" },
-  { COC, "COC", "Coding style component" },
+  { COC, "COC", "Coding_Style_Component" },
   { RGN, "RGN", "Rgeion-of-interest" },
   { QCD, "QCD", "Quantization_Default" },
   { QCC, "QCC", "Quantization component" },
@@ -143,7 +150,7 @@ static const char *getDescriptionOfProgressionOrderString(uint8_t progressionOrd
       descriptionOfProgressionOrder = "Position-component-resolution level-layer";
       break;
     case 0x04:
-      descriptionOfProgressionOrder = "Component-position-resolution level-layer";
+      descriptionOfProgressionOrder = "Component-Position-Resolution-Layer";
       break;
   }
   return descriptionOfProgressionOrder;
@@ -191,24 +198,54 @@ static void printqcd( FILE *stream, size_t len )
 
   b = read8(stream, &sqcd); assert( b );
   --len;
-  bool quant = (sqcd & 0x7f) == 0;
+  bool bquant = (sqcd & 0x7f) == 0;
+  uint8_t quant = (sqcd & 0x1f);
+  uint8_t nbits = (sqcd >> 5);
   printf( "\t\t\t\t/*\n");
   printf( "\t\t\t\t    Quantization:\n");
-  printf( "\t\t\t\t      %s\n", quant ? "yes" : "None");
+  printf( "\t\t\t\t      %s\n", bquant ? "yes" : "None");
   printf( "\t\t\t\t*/\n");
-  printf( "\t\t\t\tQuantization_Style = 0\n");
-  printf( "\t\t\t\tTotal_Guard_Bits = 1\n");
+  printf( "\t\t\t\tQuantization_Style = %u\n", quant);
+  printf( "\t\t\t\tTotal_Guard_Bits = %u\n",nbits);
   printf( "\t\t\t\t/*\n");
   printf( "\t\t\t\t    Reversible transform dynamic range exponent by sub-band.\n");
   printf( "\t\t\t\t*/\n");
   printf( "\t\t\t\tStep_Size = \n");
   printf( "\t\t\t\t	(" );
+#if 0
   size_t i;
   for( i = 0; i != len; ++i )
     {
     if( i ) printf( ", " );
     b = read8(stream, &sqcd); assert( b );
     printf("%u", sqcd);
+    }
+#endif
+  int i;
+  if( quant == 0x0 )
+    {
+    size_t n = len;
+    for( i = 0; i != n; ++i )
+      {
+      uint8_t val;
+      b = read8(stream, &val); assert( b );
+      const uint8_t exp = val >> 3;
+      if(i) printf( ", " );
+      printf( "%u", exp );
+      }
+    }
+  else
+    {
+    size_t n = len / 2;
+    for( i = 0; i != n; ++i )
+      {
+      uint16_t val;
+      b = read16(stream, &val); assert( b );
+      const uint16_t mant = val & 0x7ff;
+      const uint16_t exp = val >> 11;
+
+      printf( "\n  (%u, %u)", exp, mant );
+      }
     }
   printf(")\n");
 }
@@ -259,7 +296,10 @@ static void printcod( FILE *stream, size_t len )
 #endif
 
   printf( "\t\t\t\t    Entropy coder precincts:\n" );
-  printf( "\t\t\t\t      Precinct size = %u x %u\n", 0 , 0 );
+  if( VariablePrecinctSize )
+    printf( "\t\t\t\t      Precinct size defined in the Precinct_Size parameter.\n" );
+  else
+    printf( "\t\t\t\t      Precinct size = %u x %u\n", 0 , 0 );
   printf( "\t\t\t\t      No SOP marker segments used\n" );
   printf( "\t\t\t\t      No EPH marker used\n" );
   printf( "\t\t\t\t*/\n" );
@@ -314,18 +354,18 @@ static void printcod( FILE *stream, size_t len )
     uint8_t N = *p++;
     uint_fast8_t i;
     printf( "\t\t\t\t/*\n" );
-    printf( "\t\t\t\tPrecinct (width, height) by resolution level.\n" );
+    printf( "\t\t\t\t    Precinct (width, height) by resolution level.\n" );
     printf( "\t\t\t\t*/\n" );
     printf( "\t\t\t\tPrecinct_Size = \n", ProgressionOrder, sProgressionOrder );
-    printf( "\t\t\t\t(\n" );
+    printf( "\t\t\t\t\t(\n" );
     for( i = 0; i < NumberOfDecompositionLevels; ++i )
       {
       uint8_t val = *p++;
       /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
       uint8_t width = val & 0x0f;
       uint8_t height = val >> 4;
-      printf( "\t\t\t\t\t(%u, %u)", 1 << width, 1 << height );
-      if( i == NumberOfDecompositionLevels )
+      printf( "\t\t\t\t\t\t(%u, %u)", 1 << width, 1 << height );
+      if( i == NumberOfDecompositionLevels - 1 )
         printf( ")\n" );
       else
         printf( ",\n" );
@@ -450,7 +490,7 @@ static void printimageheaderbox( FILE * stream , size_t fulllen )
   printf("\t\t\t/*\n\t\t\t    Negative bits indicate signed values of abs (bits);\n");
   printf("\t\t\t      Zero bits indicate variable number of bits.\n");
   printf("\t\t\t*/\n");
-  printf("\t\t\tValue_Bits = \n", bpc + 1);
+  printf("\t\t\tValue_Bits = \n" );
   printf("\t\t\t\t(%u)\n", bpc + 1);
   printf("\t\t\tCompression_Type = %u\n", c);
   printf("\t\t\tColorspace_Unknown = %s\n", Unk ? "true" : "false");
@@ -579,6 +619,26 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
   return skip;
 }
 
+static void printsot( FILE *stream, size_t len )
+{
+  uint16_t Isot;
+  uint32_t Psot;
+  uint8_t  TPsot;
+  uint8_t  TNsot;
+  bool b;
+  b = read16(stream, &Isot); assert( b );
+  b = read32(stream, &Psot); assert( b );
+  b = read8(stream, &TPsot); assert( b );
+  b = read8(stream, &TNsot); assert( b );
+  printf("\t\t\t\tTile_Index = %u\n", Isot );
+  printf("\t\t\t\tTile_Part_Length = %u <bytes>\n", Psot );
+  printf("\t\t\t\tTile_Part_Index = %u\n", TPsot );
+  if( TNsot )
+    printf("\t\t\t\tTotal_Tile_Parts = %u\n", TNsot );
+  else
+    printf("\t\t\t\tTotal_Tile_Parts  unknown\n" );
+}
+
 static void printsize( FILE *stream, size_t len )
 {
   assert( len >= 4 );
@@ -594,9 +654,6 @@ static void printsize( FILE *stream, size_t len )
   uint32_t xtosiz;
   uint32_t ytosiz;
   uint16_t csiz;
-  uint8_t ssiz;
-  uint8_t xrsiz;
-  uint8_t yrsiz;
   bool b;
   b = read16(stream, &rsiz); assert( b );
   b = read32(stream, &xsiz); assert( b );
@@ -623,32 +680,45 @@ static void printsize( FILE *stream, size_t len )
   printf( "\t\t\t\t    Negative bits indicate signed values of abs (bits);\n");
   printf( "\t\t\t\t      Zero bits indicate variable number of bits.\n");
   printf( "\t\t\t\t*/\n");
-  printf( "\t\t\t\tValue_Bits = \n");
-  printf( "\t\t\t\t	(");
   uint_fast16_t i = 0;
+  assert( csiz < 4 );
+  uint8_t vb[3];
+  uint8_t hss[3];
+  uint8_t vss[3];
+  /* read all values */
   for( i = 0; i < csiz; ++i )
     {
-    if( i ) printf( "," );
-    b = read8(stream, &ssiz); assert( b );
-    printf( "%u", ssiz);
+    uint8_t *ssiz  = vb+i;
+    uint8_t *xrsiz = hss+i;
+    uint8_t *yrsiz = vss+i;
+    b = read8(stream, ssiz); assert( b );
+    b = read8(stream, xrsiz); assert( b );
+    b = read8(stream, yrsiz); assert( b );
+    }
+  /* dump out */
+  printf( "\t\t\t\tValue_Bits = \n");
+  printf( "\t\t\t\t	(");
+  for( i = 0; i < csiz; ++i )
+    {
+    if( i ) printf(", ");
+    printf("%u", vb[i] + 1);
     }
   printf(")\n");
+
   printf( "\t\t\t\tHorizontal_Sample_Spacing = \n");
   printf( "\t\t\t\t	(");
   for( i = 0; i < csiz; ++i )
     {
-    if( i ) printf( "," );
-    b = read8(stream, &xrsiz); assert( b );
-    printf( "%u", xrsiz);
+    if( i ) printf(", ");
+    printf( "%u", hss[i]);
     }
   printf( ")\n");
   printf( "\t\t\t\tVertical_Sample_Spacing = \n");
   printf( "\t\t\t\t	(");
   for( i = 0; i < csiz; ++i )
     {
-    if( i ) printf( "," );
-    b = read8(stream, &yrsiz); assert( b );
-    printf( "%u", yrsiz);
+    if( i ) printf(", ");
+    printf( "%u", vss[i]);
     }
   printf(")\n");
 }
@@ -697,7 +767,6 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
     memcpy( buffer, &swap, 4);
     buffer[4] = 0;
     printstring( "\t\t\tGROUP = ", buffer );
-assert( 0 );
     }
 	printf("\t\t\t\tMarker = 16#%X#\n", (uint16_t)marker );
 	printf("\t\t\t\t^Position = %td <byte offset>\n", offset );
@@ -717,10 +786,14 @@ assert( 0 );
   case COD:
     printcod( stream, len );
     break;
+  case SOT:
+    printsot( stream, len );
+    break;
   case EOC:
   default:
     skip = true;
     }
+  if( marker != SOT )
 	printf("\t\t\tEND_GROUP\n" );
 
   return skip;
@@ -730,6 +803,11 @@ int main(int argc, char *argv[])
 {
   if( argc < 2 ) return 1;
   const char *filename = argv[1];
+
+  if( argc == 3 )
+    {
+    printtiles = true;
+    }
 
   uintmax_t size = getfilesize( filename );
   char * fullpath = realpath(filename, NULL);

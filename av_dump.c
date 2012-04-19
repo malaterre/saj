@@ -800,7 +800,8 @@ static void printcolourspec( FILE *stream, size_t len )
   b = read8(stream, &meth); assert( b );
   b = read8(stream, &prec); assert( b );
   b = read8(stream, &approx); assert( b );
-  if( meth != 2 )
+  assert( meth == 1 || meth == 2 );
+  if( meth == 1 )
     {
     assert( len == 7 );
     b = read32(stream, &enumCS); assert( b );
@@ -809,10 +810,6 @@ static void printcolourspec( FILE *stream, size_t len )
   len--;
   len--;
   len--;
-  if( len != 0 )
-    {
-    int v = fseeko(stream, (off_t)len, SEEK_CUR);
-    }
 
   printf("\n");
   const char *smeth = "reserved";
@@ -826,6 +823,7 @@ static void printcolourspec( FILE *stream, size_t len )
       break;
     }
   const char *senumCS = "reserved";
+  char buffer[512];
   switch( enumCS )
     {
   case 16:
@@ -837,11 +835,34 @@ static void printcolourspec( FILE *stream, size_t len )
   case 18:
     senumCS = "YCC";
     break;
+  default:
+    sprintf( buffer, "unknown (%d)", enumCS );
+    senumCS = buffer;
     }
   printf("  Colour Specification Method: %s\n", smeth);
   printf("  Precedence: %u\n", prec);
   printf("  Approximation: %u\n", approx);
-  printf("  Colourspace: %s\n", senumCS);
+  if( meth == 1 )
+    {
+    printf("  Colourspace: %s\n", senumCS);
+    assert( len == 0);
+    }
+  else if( meth == 2 )
+    {
+    printf("  ICC Colour Profile:" );
+    assert( len != 0 );
+    //int v = fseeko(stream, (off_t)len, SEEK_CUR);
+//    for( ; len != 0; --len )
+    int i;
+    for( i = 0; i < len; ++i )
+      {
+      int val = fgetc(stream);
+      if( i % 16 == 0 ) printf ( "\n    " );
+      printf( "%02x ", val );
+      }
+    }
+      printf ( "\n" );
+
 }
 
 /* I.5.3 JP2 Header box (superbox) */
@@ -900,7 +921,15 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
     memcpy( buffer, &swap, 4);
     buffer[4] = 0;
     printf( "New box: \"%s\" (unknown box)\n", buffer );
-    puts( "\n" );
+    printf( "\n  " );
+    len -= 8;
+    for( ; len != 0; --len )
+      {
+      int val = fgetc(stream);
+      printf( "%02x ", val );
+      }
+      printf( "\n" );
+    return false;
     }
 
   bool skip = false;
