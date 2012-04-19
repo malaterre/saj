@@ -43,4 +43,24 @@ $ ./pirldump input.j2k > ref2
 $ vimdiff ref1 ref2
 
 
+You can also download the original conformance files:
+
+http://sourceforge.net/projects/jpeg/files/jpeg2000_images/jpeg2000_images/j2kp4files_v1_5.zip
+
+And then use:
+
+$ ./avdump J2KP4files/testfiles_jp2/file8.jp2 > out
+
+now compare:
+
+$ vimdiff out J2KP4files/descriptions_jp2/file8.desc
+
+it works with J2K too:
+
+$ ./avdump J2KP4files/codestreams_profile0/p0_14.j2k > out
+
+now compare:
+
+$ vimdiff out J2KP4files/descriptions_profile0/p0_14syntax.txt
+
 -- Mathieu Malaterre
