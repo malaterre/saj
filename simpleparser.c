@@ -106,13 +106,18 @@ static uint32_t readsot( const char *a, size_t l )
   return s.Psot;
 }
 
+/* Take as input an open FILE* stream
+ * it will not close it.
+ */
 static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t file_size )
 {
   uint16_t marker;
   uint32_t sotlen = 1;
   size_t lenmarker;
-  while( read16(stream, &marker) )
+  const off_t start = ftello( stream );
+  while( ftello( stream ) < start + file_size && read16(stream, &marker) )
     {
+    assert( marker ); /* debug */
     bool b = hasnolength( marker );
     if ( !b )
       {
@@ -167,9 +172,7 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t fil
       assert( v == 0 );
       }
     }
-  assert( feof(stream) );
 
-  fclose( stream );
   return true;
 }
 
@@ -187,16 +190,21 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
     assert( b );
     if( marker == JP2C )
       {
-      //assert( len == 0 );
+      assert( len >= 8 );
+      const off_t start = ftello(stream);
       if( printfun2( marker, len, stream ) )
         {
-        bool bb = parsej2k_imp( stream, printfun, file_size );
+        assert( len - 8 < file_size ); /* jpeg codestream can be longer than jp2 file */
+        bool bb = parsej2k_imp( stream, printfun, len - 8 /*file_size*/ );
         assert ( bb );
-        return bb;
         }
+      const off_t end = ftello(stream);
+      assert( end - start == len - 8 );
+      /* done with JP2C move on to remaining (trailing) stuff */
+      continue;
       }
 
-    assert( len > 8 );
+    assert( len >= 8 );
     if( printfun2( marker, len, stream ) )
       {
       const size_t lenmarker = len - 4 - 4;
@@ -205,6 +213,8 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
       }
     }
   assert( feof(stream) );
+  int v = fclose( stream );
+  assert( !v );
 
   return true;
 }
@@ -219,7 +229,11 @@ bool parsej2k( const char *filename, PrintFunctionJP2 printfun )
   stream = fopen( filename, "rb" );
   assert( stream );
 
-  return parsej2k_imp( stream, printfun, file_size );
+  bool b = parsej2k_imp( stream, printfun, file_size );
+  int v = fclose( stream );
+  assert( !v );
+
+  return b;
 }
 
 bool isjp2file( const char *filename )

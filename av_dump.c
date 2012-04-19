@@ -226,7 +226,9 @@ static void printeoc( FILE *stream, size_t len )
   printf("\n");
 
   off_t offset = ftello(stream);
-  assert( offset + len == file_size );
+#if 0
+  assert( offset + len == file_size ); /* file8.jp2 */
+#endif
   printf( "Size: %u bytes\n", file_size );
   printf( "Data Size: %u bytes\n", data_size );
   assert( file_size >= data_size );
