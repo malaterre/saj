@@ -69,7 +69,7 @@ static const dictentry2 * getdictentry2frommarker( uint_fast32_t marker )
 static const dictentry dict[] = {
   { SOC, "Codestream", "Start_of_Codestream" },
   { SOT, "SOT", "Start_of_Tile_Part" },
-  { SOD, "SOD", "Start of data" },
+  { SOD, "SOD", "Start_of_Data" },
   { EOC, "EOC", "End of codestream" },
   { SIZ, "SIZ", "Size" },
   { COD, "COD", "Coding_Style_Default" },
@@ -80,7 +80,7 @@ static const dictentry dict[] = {
   { POC, "POC", "Progression order change" },
   { TLM, "TLM", "Tile-part lengths" },
   { PLM, "PLM", "Packet length, main header" },
-  { PLT, "PLT", "Packet length, tile-part header" },
+  { PLT, "PLT", "Packet_Length_Tile" },
   { PPM, "PPM", "Packet packer headers, main header" },
   { PPT, "PPT", "Packet packer headers, tile-part header" },
   { SOP, "SOP", "Start of packet" },
@@ -637,7 +637,7 @@ static void printsot( FILE *stream, size_t len )
   printf("\t\t\t\tTile_Index = %u\n", Isot );
   printf("\t\t\t\tTile_Part_Length = %u <bytes>\n", Psot );
   printf("\t\t\t\tTile_Part_Index = %u\n", TPsot );
-  if( TNsot )
+  if( TNsot || printtiles )
     printf("\t\t\t\tTotal_Tile_Parts = %u\n", TNsot );
   else
     printf("\t\t\t\tTotal_Tile_Parts  unknown\n" );
@@ -793,12 +793,16 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
   case SOT:
     printsot( stream, len );
     break;
+  case PLT:
+    printf("\t\t\t\tIndex = %zd <bytes>\n", len );
+    printf("\t\t\t\tPacket_Length = %zd <bytes>\n", len );
+    printf("\t\t\t\t()\n" );
   case EOC:
   default:
     skip = true;
     }
   if( marker != SOT )
-	printf("\t\t\tEND_GROUP\n" );
+    printf("\t\t\tEND_GROUP\n" );
 
   return skip;
 }
