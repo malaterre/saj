@@ -190,8 +190,12 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
     assert( b );
     if( marker == JP2C )
       {
-      assert( len >= 8 );
       const off_t start = ftello(stream);
+      if( !len )
+        {
+        len = (uint32_t)(file_size - (uintmax_t)start + 8);
+        }
+      assert( len >= 8 );
       if( printfun2( marker, len, stream ) )
         {
         assert( len - 8 < file_size ); /* jpeg codestream cant be longer than jp2 file */

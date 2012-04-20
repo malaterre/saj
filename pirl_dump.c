@@ -39,6 +39,7 @@ static const dictentry2 dict2[] = {
   { XML , "xml ", "XML box" },
   { IHDR, "ihdr", "Image_Header" },
   { COLR, "colr", "Colour_Specification" },
+  { RES , "res", "Resolution" },
 //  { IPTR, "iptr", "Unknown" }, /* FIXME */
 
   { 0, 0, 0 }
@@ -559,6 +560,9 @@ static void printheaderbox( FILE * stream , size_t fulllen )
       break;
     case COLR:
       printcolourspec( stream, len );
+      break;
+    case RES:
+      fseeko( stream, len - 8, SEEK_CUR );
       break;
     default:
       assert( 0 ); /* TODO */

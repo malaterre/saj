@@ -44,6 +44,7 @@ typedef enum {
   CDEF = 0x63646566,
   CMAP = 0x636D6170,
   PCLR = 0x70636c72,
+  RES  = 0x72657320,
   /* JPIP */
   IPTR = 0x69707472
 } OtherType;
