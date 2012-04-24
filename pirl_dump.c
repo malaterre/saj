@@ -90,9 +90,9 @@ static const dictentry dict[] = {
   { COC, "COC", "Coding_Style_Component" },
   { RGN, "RGN", "Rgeion-of-interest" },
   { QCD, "QCD", "Quantization_Default" },
-  { QCC, "QCC", "Quantization component" },
+  { QCC, "QCC", "Quantization_Component" },
   { POC, "POC", "Progression order change" },
-  { TLM, "TLM", "Tile-part lengths" },
+  { TLM, "TLM", "Tile_Lengths" },
   { PLM, "PLM", "Packet length, main header" },
   { PLT, "PLT", "Packet_Length_Tile" },
   { PPM, "PPM", "Packet packer headers, main header" },
@@ -812,10 +812,25 @@ static void printsize( FILE *stream, size_t len )
   fprintf(fout, "\t\t\t\t      Zero bits indicate variable number of bits.\n");
   fprintf(fout, "\t\t\t\t*/\n");
   uint_fast16_t i = 0;
-  assert( csiz < 4 );
-  uint8_t vb[3];
-  uint8_t hss[3];
-  uint8_t vss[3];
+  uint8_t smallvb[4];
+  uint8_t smallhss[4];
+  uint8_t smallvss[4];
+  uint8_t *vb;
+  uint8_t *hss;
+  uint8_t *vss;
+
+  if( csiz < 5 )
+    {
+    vb = smallvb;
+    hss = smallhss;
+    vss = smallvss;
+    }
+  else
+    {
+    vb  = malloc( sizeof(uint8_t)*csiz);
+    hss = malloc( sizeof(uint8_t)*csiz);
+    vss = malloc( sizeof(uint8_t)*csiz);
+    }
   /* read all values */
   for( i = 0; i < csiz; ++i )
     {
@@ -852,6 +867,16 @@ static void printsize( FILE *stream, size_t len )
     fprintf(fout, "%u", vss[i]);
     }
   fprintf(fout,")\n");
+
+  if( csiz < 5 )
+    {
+    }
+  else
+    {
+    free(vb);
+    free(hss);
+    free(vss);
+    }
 }
 
 static void printcomment( FILE *stream, size_t len )
@@ -861,7 +886,9 @@ static void printcomment( FILE *stream, size_t len )
   uint16_t rcom;
   bool b;
   b = read16(stream, &rcom); assert( b );
+  assert( len >= 2 );
   len -= 2;
+#if 0
   char buffer[512];
   assert( len < 512 );
   size_t l = fread(buffer,sizeof(char),len,stream);
@@ -869,6 +896,28 @@ static void printcomment( FILE *stream, size_t len )
   assert( l == len );
   fprintf(fout,"\t\t\t\tData_Type = %u\n", rcom );
   fprintf(fout,"\t\t\t\tText_Data = \"%s\"\n", buffer );
+#endif
+  fprintf(fout,"\t\t\t\tData_Type = %u\n", rcom );
+  fprintf(fout,"\t\t\t\tText_Data = \"" );
+  if( len < 512 )
+    {
+    for( ; len != 0; --len )
+      {
+      int val = fgetc(stream);
+      fprintf(fout, "%c", val );
+      }
+    }
+  else
+    {
+    int c = 0;
+    for( ; len != 0; --len )
+      {
+      int val = fgetc(stream);
+      //if( c < 100 )
+      //fprintf(fout, "%c", val );
+      }
+    }
+  fprintf(fout,"\"\n" );
 }
 
 static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
