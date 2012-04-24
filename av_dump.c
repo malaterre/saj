@@ -473,6 +473,14 @@ static void printqcd( FILE *stream, size_t len )
     }
 }
 
+static void printsop( FILE *stream, size_t len )
+{
+  assert( len == 4 );
+  uint16_t Nsop;
+  bool b;
+  b = read16(stream, &Nsop); assert( b );
+}
+
 static void printsod( FILE *stream, size_t len )
 {
   int v = fseeko(stream, (off_t)len, SEEK_CUR);
@@ -617,6 +625,7 @@ static void printcoc( FILE *stream, size_t len )
     p += 2;
     }
   uint8_t Scoc = *p++;
+  assert( Scoc == 0x0 || Scoc == 0x1 );
   uint8_t NumberOfDecompositionLevels = *p++;
   uint8_t CodeBlockWidth = *p++ & 0xf;
   uint8_t CodeBlockHeight = *p++ & 0xf;
@@ -626,6 +635,7 @@ static void printcoc( FILE *stream, size_t len )
   uint8_t CodeBlockStyle = *p++ & 0x3f;
   uint8_t Transformation = *p++;
 
+#if 0
   if( Scoc )
     {
     /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
@@ -639,6 +649,7 @@ static void printcoc( FILE *stream, size_t len )
     // p1_03.j2k ???
     //assert( !NumberOfDecompositionLevels );
   assert( p == end );
+#endif
   bool ResetContextProbabilitiesOnCodingPassBoundaries = (CodeBlockStyle & 0x02) != 0;
   bool TerminationOnEachCodingPass                     = (CodeBlockStyle & 0x04) != 0;
   bool VerticallyCausalContext                         = (CodeBlockStyle & 0x08) != 0;
@@ -648,7 +659,7 @@ static void printcoc( FILE *stream, size_t len )
 
   fprintf(fout, "\n");
   fprintf(fout, "  Component                          : %u\n", ccoc);
-  fprintf(fout, "  Precincts                          : %s\n", Scoc == 0x0 ? "default" : "other" );
+  fprintf(fout, "  Precincts                          : %s\n", Scoc == 0x0 ? "default" : "custom" );
   fprintf(fout, "  Decomposition Levels               : %u\n", NumberOfDecompositionLevels);
   fprintf(fout, "  Code-block size                    : %ux%u\n", 1 << xcb, 1 << ycb);
   fprintf(fout, "  Selective Arithmetic Coding Bypass : %s\n", Scoc ? "yes" : "no" );
@@ -658,6 +669,21 @@ static void printcoc( FILE *stream, size_t len )
   fprintf(fout, "  Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
   fprintf(fout, "  Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
   fprintf(fout, "  Wavelet Transformation             : %s\n", sTransformation );
+
+  if( Scoc )
+    {
+    //uint8_t N = *p++;
+    uint_fast8_t i;
+    for( i = 0; i <= NumberOfDecompositionLevels; ++i )
+      {
+      uint8_t val = *p++;
+      /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
+      uint8_t width = val & 0x0f;
+      uint8_t height = val >> 4;
+      print_with_indent(indentlevel, "  Precinct #%u Size Exponents         : %ux%u\n", i, width, height );
+      }
+    }
+  assert( p == end );
 }
 
 static void printcod( FILE *stream, size_t len )
@@ -672,6 +698,7 @@ static void printcod( FILE *stream, size_t len )
 
 /* Table A.12 - Coding style default parameter values */
   const uint8_t *p = (const uint8_t*)buffer;
+  const uint8_t *end = p + len;
   uint8_t Scod = *p++;
   uint8_t ProgressionOrder = *p++;
   u16.bytes[0] = (char)*p++;
@@ -722,6 +749,21 @@ static void printcod( FILE *stream, size_t len )
   print_with_indent(indentlevel, "  Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
   print_with_indent(indentlevel, "  Wavelet Transformation             : %s\n", sTransformation );
 
+  if( VariablePrecinctSize )
+    {
+    //uint8_t N = *p++;
+    uint_fast8_t i;
+    for( i = 0; i <= NumberOfDecompositionLevels; ++i )
+      {
+      uint8_t val = *p++;
+      /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
+      uint8_t width = val & 0x0f;
+      uint8_t height = val >> 4;
+      print_with_indent(indentlevel, "  Precinct #%u Size Exponents         : %ux%u\n", i, width, height );
+      }
+    }
+
+  assert( p == end );
 }
 
 /* I.5.1 JPEG 2000 Signature box */
@@ -1251,6 +1293,9 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
     return false;
   case SIZ:
     printsiz( stream, len );
+    return false;
+  case SOP:
+    printsop( stream, len );
     return false;
   case SOD:
     printsod( stream, len );
