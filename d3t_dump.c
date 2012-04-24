@@ -31,6 +31,8 @@
 
 #include <simpleparser.h>
 
+FILE *fout;
+
 typedef struct {
   uint16_t marker;
   const char* shortname;
@@ -190,22 +192,22 @@ static void printcod( FILE *stream, size_t len )
   const char * sProgressionOrder = getDescriptionOfProgressionOrderString(ProgressionOrder);
   const char * sTransformation = getDescriptionOfWaveletTransformationString(Transformation);
 
-  printf( "\tJPEG_COD_Parameters:\n" );
-  printf( "\t\tScod = 0x%u\n", Scod );
+  fprintf(fout, "\tJPEG_COD_Parameters:\n" );
+  fprintf(fout, "\t\tScod = 0x%u\n", Scod );
   /* Table A.13 Coding style parameter values for the Scod parameter */
   bool VariablePrecinctSize = (Scod & 0x01) != 0;
   bool SOPMarkerSegments    = (Scod & 0x02) != 0;
   bool EPHPMarkerSegments   = (Scod & 0x04) != 0;
-  printf("\t\t\t Precinct size %s\n", (VariablePrecinctSize ? "defined for each resolution level" : "PPx = 15 and PPy = 15") );
-  printf("\t\t\t SOPMarkerSegments = %s used\n", (SOPMarkerSegments    ? "may be"   : "not") );
-  printf("\t\t\t EPHPMarkerSegments = %s used\n", (EPHPMarkerSegments   ? "shall be" : "not") );
-  printf( "\t\tProgressionOrder = 0x%x (%s progression)\n", ProgressionOrder, sProgressionOrder );
-  printf( "\t\tNumberOfLayers = %u\n", NumberOfLayers );
-  printf( "\t\tMultipleComponentTransformation = 0x%x (%s)\n", MultipleComponentTransformation, sMultipleComponentTransformation );
-  printf( "\t\tNumberOfDecompositionLevels = %u\n", NumberOfDecompositionLevels );
-  printf( "\t\tCodeBlockWidth = 0x%x\n", CodeBlockWidth );
-  printf( "\t\tCodeBlockHeight = 0x%x\n", CodeBlockHeight );
-  printf( "\t\tCodeBlockStyle = 0x%x\n", CodeBlockStyle );
+  fprintf(fout,"\t\t\t Precinct size %s\n", (VariablePrecinctSize ? "defined for each resolution level" : "PPx = 15 and PPy = 15") );
+  fprintf(fout,"\t\t\t SOPMarkerSegments = %s used\n", (SOPMarkerSegments    ? "may be"   : "not") );
+  fprintf(fout,"\t\t\t EPHPMarkerSegments = %s used\n", (EPHPMarkerSegments   ? "shall be" : "not") );
+  fprintf(fout, "\t\tProgressionOrder = 0x%x (%s progression)\n", ProgressionOrder, sProgressionOrder );
+  fprintf(fout, "\t\tNumberOfLayers = %u\n", NumberOfLayers );
+  fprintf(fout, "\t\tMultipleComponentTransformation = 0x%x (%s)\n", MultipleComponentTransformation, sMultipleComponentTransformation );
+  fprintf(fout, "\t\tNumberOfDecompositionLevels = %u\n", NumberOfDecompositionLevels );
+  fprintf(fout, "\t\tCodeBlockWidth = 0x%x\n", CodeBlockWidth );
+  fprintf(fout, "\t\tCodeBlockHeight = 0x%x\n", CodeBlockHeight );
+  fprintf(fout, "\t\tCodeBlockStyle = 0x%x\n", CodeBlockStyle );
 
   /* Table A.19 - Code-block style for the SPcod and SPcoc parameters */
   bool SelectiveArithmeticCodingBypass                 = (CodeBlockStyle & 0x01) != 0;
@@ -214,14 +216,14 @@ static void printcod( FILE *stream, size_t len )
   bool VerticallyCausalContext                         = (CodeBlockStyle & 0x08) != 0;
   bool PredictableTermination                          = (CodeBlockStyle & 0x10) != 0;
   bool SegmentationSymbolsAreUsed                      = (CodeBlockStyle & 0x20) != 0;
-  printf( "\t\t\t %s arithmetic coding bypass\n", (SelectiveArithmeticCodingBypass                  ? "Selective"    : "No selective") );
-  printf( "\t\t\t %s context probabilities on coding pass boundaries\n", (ResetContextProbabilitiesOnCodingPassBoundaries  ? "Reset"        : "No reset of"));
-  printf( "\t\t\t %s on each coding pass\n", (TerminationOnEachCodingPass                      ? "Termination"  : "No termination"));
-  printf( "\t\t\t %s causal context\n", (VerticallyCausalContext                          ? "Vertically"   : "No vertically"));
-  printf( "\t\t\t %s termination\n", (PredictableTermination                           ? "Predictable"  : "No predictable"));
-  printf( "\t\t\t %s symbols are used\n", (SegmentationSymbolsAreUsed                       ? "Segmentation" : "No segmentation"));
-  printf( "\t\tWaveletTransformation = 0x%x (%s)\n", Transformation, sTransformation );
-  printf( "\n" );
+  fprintf(fout, "\t\t\t %s arithmetic coding bypass\n", (SelectiveArithmeticCodingBypass                  ? "Selective"    : "No selective") );
+  fprintf(fout, "\t\t\t %s context probabilities on coding pass boundaries\n", (ResetContextProbabilitiesOnCodingPassBoundaries  ? "Reset"        : "No reset of"));
+  fprintf(fout, "\t\t\t %s on each coding pass\n", (TerminationOnEachCodingPass                      ? "Termination"  : "No termination"));
+  fprintf(fout, "\t\t\t %s causal context\n", (VerticallyCausalContext                          ? "Vertically"   : "No vertically"));
+  fprintf(fout, "\t\t\t %s termination\n", (PredictableTermination                           ? "Predictable"  : "No predictable"));
+  fprintf(fout, "\t\t\t %s symbols are used\n", (SegmentationSymbolsAreUsed                       ? "Segmentation" : "No segmentation"));
+  fprintf(fout, "\t\tWaveletTransformation = 0x%x (%s)\n", Transformation, sTransformation );
+  fprintf(fout, "\n" );
 }
 
 static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
@@ -229,12 +231,12 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
   off_t offset = ftello(stream);
   const dictentry2 *d = getdictentry2frommarker( marker );
   (void)len;
-  printf( "Offset 0x%04tx Marker 0x%04x %s %s\n", offset, (uint32_t)marker, d->shortname, d->longname );
+  fprintf(fout, "Offset 0x%04tx Marker 0x%04x %s %s\n", offset, (uint32_t)marker, d->shortname, d->longname );
 
   switch( marker )
     {
   case JP2C:
-    puts( "--" );
+    fprintf(fout, "--" );
     break;
     }
 
@@ -254,16 +256,16 @@ static bool print( uint_fast16_t marker, size_t len, FILE *stream )
     }
   const dictentry *d = getdictentryfrommarker( marker );
   assert( offset >= 0 );
-  printf( "Offset 0x%04jx Marker 0x%04x %s %s", offset, (unsigned int)marker, d->shortname, d->longname );
+  fprintf(fout, "Offset 0x%04jx Marker 0x%04x %s %s", offset, (unsigned int)marker, d->shortname, d->longname );
   if( !hasnolength( marker ) )
     {
-    printf( " length variable 0x%02zx", len + 2 );
+    fprintf(fout, " length variable 0x%02zx", len + 2 );
     }
-  printf("\n");
+  fprintf(fout,"\n");
   switch( marker )
     {
   case EOC:
-    puts( "End of file" );
+    fprintf(fout, "End of file" );
     break;
   case COD:
     printcod( stream, len );
@@ -277,6 +279,16 @@ int main(int argc, char *argv[])
   if( argc < 2 ) return 1;
   const char *filename = argv[1];
 
+  if( argc > 2 )
+    {
+    const char *outfilename = argv[2];
+    fout = fopen( outfilename, "w" );
+    }
+  else
+    {
+    fout = stdout;
+    }
+
   bool b;
   if( isjp2file( filename ) )
     {
@@ -285,6 +297,10 @@ int main(int argc, char *argv[])
   else
     {
     b = parsej2k( filename, &print );
+    }
+  if( argc > 2 )
+    {
+    fclose( fout );
     }
   if( !b ) return 1;
 

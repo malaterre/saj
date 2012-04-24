@@ -41,6 +41,19 @@
 
 #include <simpleparser.h>
 
+FILE * fout;
+static int indentlevel = 0;
+
+void print_with_indent(int indent, const char * format, ...)
+{
+  va_list arg;
+  va_start(arg, format);
+  fprintf(fout,"%*s" "%s", indent, " ", "");
+  vfprintf(fout,format, arg);
+  va_end(arg);
+}
+
+
 static bool read8(FILE *input, uint8_t * ret)
 {
   union { uint8_t v; char bytes[1]; } u;
@@ -223,18 +236,18 @@ uintmax_t file_size;
 
 static void printeoc( FILE *stream, size_t len )
 {
-  printf("\n");
+  fprintf(fout,"\n");
 
   off_t offset = ftello(stream);
 #if 0
   assert( offset + len == file_size ); /* file8.jp2 */
 #endif
-  printf( "Size: %u bytes\n", file_size );
-  printf( "Data Size: %u bytes\n", data_size );
+  fprintf(fout, "Size: %u bytes\n", file_size );
+  fprintf(fout, "Data Size: %u bytes\n", data_size );
   assert( file_size >= data_size );
   uintmax_t overhead = file_size - data_size;
   const int ratio = 100 * overhead / file_size;
-  printf( "Overhead: %u bytes (%u%)\n", overhead , ratio );
+  fprintf(fout, "Overhead: %u bytes (%u%)\n", overhead , ratio );
 }
 
 static void printqcd( FILE *stream, size_t len )
@@ -247,7 +260,7 @@ static void printqcd( FILE *stream, size_t len )
   uint8_t quant = (sqcd & 0x1f);
   uint8_t nbits = (sqcd >> 5);
   size_t i;
-  printf("\n");
+  fprintf(fout,"\n");
   const char *s = "reserved";
   switch( quant )
     {
@@ -261,8 +274,8 @@ static void printqcd( FILE *stream, size_t len )
     s = "scalar expounded";
     break;
     }
-  printf( "  Quantization Type : %s\n", s );
-  printf( "  Guard Bits        : %u\n", nbits );
+  print_with_indent(indentlevel, "  Quantization Type : %s\n", s );
+  print_with_indent(indentlevel, "  Guard Bits        : %u\n", nbits );
 
   if( quant == 0x0 )
     {
@@ -272,7 +285,7 @@ static void printqcd( FILE *stream, size_t len )
       uint8_t val;
       b = read8(stream, &val); assert( b );
       const uint8_t exp = val >> 3;
-      printf( "  Exponent #%-8u: %u\n", i, exp );
+      print_with_indent(indentlevel, "  Exponent #%-8u: %u\n", i, exp );
       }
     }
   else
@@ -285,8 +298,8 @@ static void printqcd( FILE *stream, size_t len )
       const uint16_t mant = val & 0x7ff;
       const uint16_t exp = val >> 11;
 
-      printf( "  Mantissa #%-8u: %u\n", i, mant );
-      printf( "  Exponent #%-8u: %u\n", i, exp );
+      print_with_indent(indentlevel, "  Mantissa #%-8u: %u\n", i, mant );
+      print_with_indent(indentlevel, "  Exponent #%-8u: %u\n", i, exp );
       }
     }
 }
@@ -296,8 +309,8 @@ static void printsod( FILE *stream, size_t len )
   int v = fseeko(stream, (off_t)len, SEEK_CUR);
   if( len )
     {
-    printf("\n" );
-    printf("Data : %u bytes\n", len );
+    fprintf(fout,"\n" );
+    fprintf(fout,"Data : %u bytes\n", len );
     data_size += len;
     }
 }
@@ -313,14 +326,14 @@ static void printsot( FILE *stream, size_t len )
   b = read32(stream, &Psot); assert( b );
   b = read8(stream, &TPsot); assert( b );
   b = read8(stream, &TNsot); assert( b );
-  printf("\n" );
-  printf("  Tile        : %u\n", Isot );
-  printf("  Length      : %u\n", Psot );
-  printf("  Index       : %u\n", TPsot );
+  fprintf(fout,"\n" );
+  fprintf(fout,"  Tile        : %u\n", Isot );
+  fprintf(fout,"  Length      : %u\n", Psot );
+  fprintf(fout,"  Index       : %u\n", TPsot );
   if( TNsot )
-    printf("  Tile-Parts: : %u\n", TNsot );
+    fprintf(fout,"  Tile-Parts: : %u\n", TNsot );
   else
-    printf("  Tile-Parts: : unknown\n" );
+    fprintf(fout,"  Tile-Parts: : unknown\n" );
 }
 
 static void printcomment( FILE *stream, size_t len )
@@ -329,20 +342,20 @@ static void printcomment( FILE *stream, size_t len )
   bool b;
   b = read16(stream, &rcom); assert( b );
   len -= 2;
-  printf("\n" );
-  printf("  Registration : %s\n", rcom ? "ISO-8859-15" : "binary" );
+  fprintf(fout,"\n" );
+  fprintf(fout,"  Registration : %s\n", rcom ? "ISO-8859-15" : "binary" );
   if( len < 512 )
     {
     char buffer[512];
     size_t l = fread(buffer,sizeof(char),len,stream);
     buffer[len] = 0;
     assert( l == len );
-    printf("  Comment      : %s\n", buffer );
+    fprintf(fout,"  Comment      : %s\n", buffer );
     }
   else
     {
     int v = fseeko(stream, (off_t)len, SEEK_CUR);
-    printf("  Comment      : ...\n");
+    fprintf(fout,"  Comment      : ...\n");
     }
 
 }
@@ -354,11 +367,11 @@ static void printtlm( FILE *stream, size_t len )
   size_t r = fread( buffer, sizeof(char), len, stream);
   assert( r == len );
 
-  printf( "\n" );
+  fprintf(fout, "\n" );
   const uint8_t *p = (const uint8_t*)buffer;
   const uint8_t *end = p + len;
   uint8_t Ztlm = *p++;
-  printf( "  Index          : %u\n", Ztlm );
+  fprintf(fout, "  Index          : %u\n", Ztlm );
   uint8_t Stlm = *p++;
   uint8_t ST = ( Stlm >> 4 ) & 0x3;
   uint8_t SP = ( Stlm >> 6 ) & 0x1;
@@ -375,18 +388,18 @@ static void printtlm( FILE *stream, size_t len )
     {
     if( ST == 0 )
       {
-      printf( "  Tile index #%-3d: in order\n", i );
+      fprintf(fout, "  Tile index #%-3d: in order\n", i );
       }
     else if( ST == 1 )
       {
       uint8_t v = *p++;
-      printf( "  Tile index #%-3d: %u\n", i, v );
+      fprintf(fout, "  Tile index #%-3d: %u\n", i, v );
       }
     else if( ST == 2 )
       {
       uint16_t v;
       cread16(p, &v);
-      printf( "  Tile index #%-2d: %u\n", i, v );
+      fprintf(fout, "  Tile index #%-2d: %u\n", i, v );
       }
     else
       {
@@ -397,13 +410,13 @@ static void printtlm( FILE *stream, size_t len )
       {
       uint16_t v;
       cread16(p, &v);
-      printf( "  Length #%-7d: %u\n",i, v );
+      fprintf(fout, "  Length #%-7d: %u\n",i, v );
       }
     if( Ptlm_size == 4 )
       {
       uint32_t v;
       cread32(p, &v);
-      printf( "  Length #%-6d: %u\n",i, v );
+      fprintf(fout, "  Length #%-6d: %u\n",i, v );
       }
     else
       {
@@ -470,18 +483,18 @@ static void printcoc( FILE *stream, size_t len )
   bool SegmentationSymbolsAreUsed                      = (CodeBlockStyle & 0x20) != 0;
   const char * sTransformation = getDescriptionOfWaveletTransformationString(Transformation);
 
-  printf( "\n");
-  printf( "  Component                          : %u\n", comp);
-  printf( "  Precincts                          : %s\n", Scoc == 0x0 ? "default" : "other" );
-  printf( "  Decomposition Levels               : %u\n", NumberOfDecompositionLevels);
-  printf( "  Code-block size                    : %ux%u\n", 1 << xcb, 1 << ycb);
-  printf( "  Selective Arithmetic Coding Bypass : %s\n", SelectiveArithmeticCodingBypass ? "yes" : "no" );
-  printf( "  Reset Context Probabilities        : %s\n", ResetContextProbabilitiesOnCodingPassBoundaries ? "yes" : "no" );
-  printf( "  Termination on Each Coding Pass    : %s\n", TerminationOnEachCodingPass ? "yes" : "no" );
-  printf( "  Vertically Causal Context          : %s\n", VerticallyCausalContext ? "yes" : "no" );
-  printf( "  Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
-  printf( "  Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
-  printf( "  Wavelet Transformation             : %s\n", sTransformation );
+  fprintf(fout, "\n");
+  fprintf(fout, "  Component                          : %u\n", comp);
+  fprintf(fout, "  Precincts                          : %s\n", Scoc == 0x0 ? "default" : "other" );
+  fprintf(fout, "  Decomposition Levels               : %u\n", NumberOfDecompositionLevels);
+  fprintf(fout, "  Code-block size                    : %ux%u\n", 1 << xcb, 1 << ycb);
+  fprintf(fout, "  Selective Arithmetic Coding Bypass : %s\n", SelectiveArithmeticCodingBypass ? "yes" : "no" );
+  fprintf(fout, "  Reset Context Probabilities        : %s\n", ResetContextProbabilitiesOnCodingPassBoundaries ? "yes" : "no" );
+  fprintf(fout, "  Termination on Each Coding Pass    : %s\n", TerminationOnEachCodingPass ? "yes" : "no" );
+  fprintf(fout, "  Vertically Causal Context          : %s\n", VerticallyCausalContext ? "yes" : "no" );
+  fprintf(fout, "  Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
+  fprintf(fout, "  Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
+  fprintf(fout, "  Wavelet Transformation             : %s\n", sTransformation );
 }
 
 static void printcod( FILE *stream, size_t len )
@@ -527,24 +540,24 @@ static void printcod( FILE *stream, size_t len )
   bool VerticallyCausalContext                         = (CodeBlockStyle & 0x08) != 0;
   bool PredictableTermination                          = (CodeBlockStyle & 0x10) != 0;
   bool SegmentationSymbolsAreUsed                      = (CodeBlockStyle & 0x20) != 0;
-  printf( "\n" );
+  fprintf(fout, "\n" );
 
-  printf( "  Default Precincts of 2^15x2^15     : %s\n" , VariablePrecinctSize ? "no" : "yes" );
-  printf( "  SOP Marker Segments                : %s\n" , SOPMarkerSegments ? "yes" : "no" );
-  printf( "  EPH Marker Segments                : %s\n" , EPHPMarkerSegments ? "yes" : "no" );
-  printf( "  All Flags                          : %08u\n", Scod );
-  printf( "  Progression Order                  : %s\n", sProgressionOrder );
-  printf( "  Layers                             : %u\n", NumberOfLayers );
-  printf( "  Multiple Component Transformation  : %s\n", sMultipleComponentTransformation );
-  printf( "  Decomposition Levels               : %u\n", NumberOfDecompositionLevels );
-  printf( "  Code-block size                    : %ux%u\n", 1 << xcb, 1 << ycb );
-  printf( "  Selective Arithmetic Coding Bypass : %s\n", SelectiveArithmeticCodingBypass ? "yes" : "no" );
-  printf( "  Reset Context Probabilities        : %s\n", ResetContextProbabilitiesOnCodingPassBoundaries ? "yes" : "no" );
-  printf( "  Termination on Each Coding Pass    : %s\n", TerminationOnEachCodingPass ? "yes" : "no" );
-  printf( "  Vertically Causal Context          : %s\n", VerticallyCausalContext ? "yes" : "no" );
-  printf( "  Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
-  printf( "  Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
-  printf( "  Wavelet Transformation             : %s\n", sTransformation );
+  print_with_indent(indentlevel, "  Default Precincts of 2^15x2^15     : %s\n" , VariablePrecinctSize ? "no" : "yes" );
+  print_with_indent(indentlevel, "  SOP Marker Segments                : %s\n" , SOPMarkerSegments ? "yes" : "no" );
+  print_with_indent(indentlevel, "  EPH Marker Segments                : %s\n" , EPHPMarkerSegments ? "yes" : "no" );
+  print_with_indent(indentlevel, "  All Flags                          : %08u\n", Scod );
+  print_with_indent(indentlevel, "  Progression Order                  : %s\n", sProgressionOrder );
+  print_with_indent(indentlevel, "  Layers                             : %u\n", NumberOfLayers );
+  print_with_indent(indentlevel, "  Multiple Component Transformation  : %s\n", sMultipleComponentTransformation );
+  print_with_indent(indentlevel, "  Decomposition Levels               : %u\n", NumberOfDecompositionLevels );
+  print_with_indent(indentlevel, "  Code-block size                    : %ux%u\n", 1 << xcb, 1 << ycb );
+  print_with_indent(indentlevel, "  Selective Arithmetic Coding Bypass : %s\n", SelectiveArithmeticCodingBypass ? "yes" : "no" );
+  print_with_indent(indentlevel, "  Reset Context Probabilities        : %s\n", ResetContextProbabilitiesOnCodingPassBoundaries ? "yes" : "no" );
+  print_with_indent(indentlevel, "  Termination on Each Coding Pass    : %s\n", TerminationOnEachCodingPass ? "yes" : "no" );
+  print_with_indent(indentlevel, "  Vertically Causal Context          : %s\n", VerticallyCausalContext ? "yes" : "no" );
+  print_with_indent(indentlevel, "  Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
+  print_with_indent(indentlevel, "  Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
+  print_with_indent(indentlevel, "  Wavelet Transformation             : %s\n", sTransformation );
 
 }
 
@@ -555,8 +568,8 @@ static void printsignature( FILE * stream )
   const uint32_t sig = 0xd0a870a;
   bool b = read32(stream, &s);
   assert( b );
-  printf("\n" );
-  printf("  Corrupted: %s\n", s == sig ? "no" : "yes" );
+  fprintf(fout,"\n" );
+  fprintf(fout,"  Corrupted: %s\n", s == sig ? "no" : "yes" );
 }
 
 static void printstring( const char *in, const char *ref )
@@ -564,23 +577,23 @@ static void printstring( const char *in, const char *ref )
   assert( in );
   assert( ref );
   size_t len = strlen( ref );
-  printf("%s", in);
+  fprintf(fout,"%s", in);
   if( len < 4 )
     {
     int l;
-    printf("\"");
-    printf("%s", ref);
+    fprintf(fout,"\"");
+    fprintf(fout,"%s", ref);
     for( l = 0; l < 4 - (int)len; ++l )
       {
-      printf(" ");
+      fprintf(fout," ");
       }
-    printf("\"");
+    fprintf(fout,"\"");
     }
   else
     {
-    printf("%s", ref);
+    fprintf(fout,"%s", ref);
     }
-    printf("\n");
+    fprintf(fout,"\n");
 }
 
 static const char * getbrand( const char br[] )
@@ -596,8 +609,8 @@ static const char * getbrand( const char br[] )
 /* I.7.1 XML boxes */
 static void printxml( FILE * stream, size_t len )
 {
-  printf( "\n" );
-  printf( "Data:\n" );
+  fprintf(fout, "\n" );
+  fprintf(fout, "Data:\n" );
   for( ; len != 0; --len )
     {
     int val = fgetc(stream);
@@ -606,11 +619,11 @@ static void printxml( FILE * stream, size_t len )
     /*if( !iscntrl( val ) ) */
     /* it does not look like the tool is consistant BTW */
     if( val != 0xd )
-      printf( "%c", val );
+      fprintf(fout, "%c", val );
     }
-  printf( "\n");
-  printf( "\n");
-  printf( "\n");
+  fprintf(fout, "\n");
+  fprintf(fout, "\n");
+  fprintf(fout, "\n");
 }
 
 /* I.5.2 File Type box */
@@ -628,37 +641,37 @@ static void printfiletype( FILE * stream, size_t len )
 
   /* Table I.3 - Legal Brand values */
   const char *brand = getbrand( br );
-  printf("\n" );
+  fprintf(fout,"\n" );
   if( brand )
     {
-    printf("  Brand: %s\n", brand );
+    fprintf(fout,"  Brand: %s\n", brand );
     }
   else
     {
     uint32_t v;
     memcpy( &v, br, 4 );
-    printf("  Brand: 0x%08x\n", bswap_32(v) );
+    fprintf(fout,"  Brand: 0x%08x\n", bswap_32(v) );
     }
-  printf("  Minor version: %u\n", minv );
+  fprintf(fout,"  Minor version: %u\n", minv );
   int i;
-  printf("  Compatibility: " );
+  fprintf(fout,"  Compatibility: " );
   for (i = 0; i < n; ++i )
     {
-    if( i ) printf( " " );
+    if( i ) fprintf(fout, " " );
     fread(br,4,1,stream); assert( b );
     const char *brand = getbrand( br );
     if( brand )
       {
-      printf("%s", brand );
+      fprintf(fout,"%s", brand );
       }
     else
       {
       uint32_t v;
       memcpy( &v, br, 4 );
-      printf("0x%08x", bswap_32(v) );
+      fprintf(fout,"0x%08x", bswap_32(v) );
       }
     }
-    printf( "\n" );
+    fprintf(fout, "\n" );
 }
 
 /* I.5.3.1 Image Header box */
@@ -682,16 +695,16 @@ static void printimageheaderbox( FILE * stream , size_t fulllen )
   b = read8(stream, &Unk); assert( b );
   b = read8(stream, &IPR); assert( b );
 
-  printf("\n" );
-  printf("  Height: %u\n", height );
-  printf("  Width: %u\n", width);
-  printf("  Components: %u\n", nc);
-  printf("  Bits Per Component: %u\n", (bpc & 0x7f) + 1);
   const bool sign = bpc >> 7;
-  printf("  Signed Components: %s\n", sign ? "yes" : "no" );
-  printf("  Compression Type: %s\n", c == 7 ? "wavelet" : "holly crap");
-  printf("  Unknown Colourspace: %s\n", Unk ? "yes" : "no");
-  printf("  Intellectual Property: %s\n", IPR ? "yes" : "no");
+  fprintf(fout,"\n" );
+  print_with_indent(indentlevel, "  Height: %u\n", height );
+  print_with_indent(indentlevel, "  Width: %u\n", width);
+  print_with_indent(indentlevel, "  Components: %u\n", nc);
+  print_with_indent(indentlevel, "  Bits Per Component: %u\n", (bpc & 0x7f) + 1);
+  print_with_indent(indentlevel, "  Signed Components: %s\n", sign ? "yes" : "no" );
+  print_with_indent(indentlevel, "  Compression Type: %s\n", c == 7 ? "wavelet" : "holly crap");
+  print_with_indent(indentlevel, "  Unknown Colourspace: %s\n", Unk ? "yes" : "no");
+  print_with_indent(indentlevel, "  Intellectual Property: %s\n", IPR ? "yes" : "no");
 }
 
 static void printcmap( FILE *stream, size_t len )
@@ -703,7 +716,7 @@ static void printcmap( FILE *stream, size_t len )
   uint8_t MTYPi;
   uint8_t PCOLi;
   int i;
-  printf( "\n" );
+  fprintf(fout, "\n" );
   for( i = 0; i < n; ++i )
     {
     b = read16(stream, &CMPi); assert( b );
@@ -713,9 +726,9 @@ static void printcmap( FILE *stream, size_t len )
     len--;
     b = read8(stream, &PCOLi); assert( b );
     len--;
-    printf( "  Component      #%d: %u\n", i, CMPi );
-    printf( "  Mapping Type   #%d: %s\n", i, MTYPi ? "palette mapping" : "wazzza" );
-    printf( "  Palette Column #%d: %u\n", i, PCOLi );
+    fprintf(fout, "  Component      #%d: %u\n", i, CMPi );
+    fprintf(fout, "  Mapping Type   #%d: %s\n", i, MTYPi ? "palette mapping" : "wazzza" );
+    fprintf(fout, "  Palette Column #%d: %u\n", i, PCOLi );
     }
   assert( len == 0 );
 }
@@ -737,28 +750,28 @@ static void printpclr( FILE *stream, size_t len )
   len--;
   b = read8(stream, &NPC); assert( b );
   len--;
-  printf("\n" );
-  printf("  Entries: %u\n", NE );
-  printf("  Created Channels: %u\n", NPC  );
+  fprintf(fout,"\n" );
+  fprintf(fout,"  Entries: %u\n", NE );
+  fprintf(fout,"  Created Channels: %u\n", NPC  );
   for( j = 0; j < NPC; ++j )
     {
     b = read8(stream, &Bi); assert( b );
     len--;
     const bool sign = Bi >> 7;
-    printf("  Depth  #%u: %u\n", j, (Bi & 0x7f) + 1 );
-    printf("  Signed #%u: %s\n", j, sign ? "yes" : "no" );
+    fprintf(fout,"  Depth  #%u: %u\n", j, (Bi & 0x7f) + 1 );
+    fprintf(fout,"  Signed #%u: %s\n", j, sign ? "yes" : "no" );
     }
   for( i = 0; i < NE; ++i )
     {
-      printf("  Entry #%03u: ", i );
+      fprintf(fout,"  Entry #%03u: ", i );
     for( j = 0; j < NPC; ++j )
       {
       b = read8(stream, &Cij); assert( b );
       len--;
-      if( j ) printf(" ");
-      printf("0x%010x", Cij );
+      if( j ) fprintf(fout," ");
+      fprintf(fout,"0x%010x", Cij );
       }
-    printf("\n" );
+    fprintf(fout,"\n" );
     }
   assert( len == 0 );
 }
@@ -775,15 +788,15 @@ static void printcdef( FILE *stream, size_t len )
   uint16_t cni;
   uint16_t typi;
   uint16_t asoci;
-    printf("\n" );
+  fprintf(fout,"\n" );
   for (i = 0; i < N; ++i )
     {
     b = read16(stream, &cni); assert( b );
     b = read16(stream, &typi); assert( b );
     b = read16(stream, &asoci); assert( b );
-    printf("  Channel     #%u: %x\n", i, cni );
-    printf("  Type        #%u: %s\n", i, typi == 0 ? "color" : "donno" );
-    printf("  Association #%u: %x\n", i, asoci );
+    print_with_indent(indentlevel,"  Channel     #%u: %x\n", i, cni );
+    print_with_indent(indentlevel,"  Type        #%u: %s\n", i, typi == 0 ? "color" : "donno" );
+    print_with_indent(indentlevel,"  Association #%u: %x\n", i, asoci );
     }
 }
 
@@ -811,7 +824,7 @@ static void printcolourspec( FILE *stream, size_t len )
   len--;
   len--;
 
-  printf("\n");
+  fprintf(fout,"\n");
   const char *smeth = "reserved";
   switch( meth )
     {
@@ -836,20 +849,20 @@ static void printcolourspec( FILE *stream, size_t len )
     senumCS = "YCC";
     break;
   default:
-    sprintf( buffer, "unknown (%d)", enumCS );
+    sprintf(buffer, "unknown (%d)", enumCS );
     senumCS = buffer;
     }
-  printf("  Colour Specification Method: %s\n", smeth);
-  printf("  Precedence: %u\n", prec);
-  printf("  Approximation: %u\n", approx);
+  print_with_indent(indentlevel,"  Colour Specification Method: %s\n", smeth);
+  print_with_indent(indentlevel,"  Precedence: %u\n", prec);
+  print_with_indent(indentlevel,"  Approximation: %u\n", approx);
   if( meth == 1 )
     {
-    printf("  Colourspace: %s\n", senumCS);
+    print_with_indent(indentlevel,"  Colourspace: %s\n", senumCS);
     assert( len == 0);
     }
   else if( meth == 2 )
     {
-    printf("  ICC Colour Profile:" );
+    fprintf(fout,"  ICC Colour Profile:" );
     assert( len != 0 );
     //int v = fseeko(stream, (off_t)len, SEEK_CUR);
 //    for( ; len != 0; --len )
@@ -857,11 +870,11 @@ static void printcolourspec( FILE *stream, size_t len )
     for( i = 0; i < len; ++i )
       {
       int val = fgetc(stream);
-      if( i % 16 == 0 ) printf ( "\n    " );
-      printf( "%02x ", val );
+      if( i % 16 == 0 ) fprintf (fout, "\n    " );
+      fprintf(fout, "%02x ", val );
       }
     }
-      printf ( "\n" );
+      fprintf (fout, "\n" );
 
 }
 
@@ -881,8 +894,8 @@ static void printheaderbox( FILE * stream , size_t fulllen )
 
     off_t offset = ftello(stream);
     const dictentry2 *d = getdictentry2frommarker( marker );
-    printf( "\n" );
-    printf( "  Sub box: \"%s\" (%s)\n", d->shortname, d->longname );
+    fprintf(fout, "\n" );
+    fprintf(fout, "  Sub box: \"%s\" (%s)\n", d->shortname, d->longname );
     switch( marker )
       {
     case IHDR:
@@ -911,24 +924,24 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
   off_t offset = ftello(stream);
   const dictentry2 *d = getdictentry2frommarker( marker );
   (void)len;
-  printf( "\n" );
+  fprintf(fout, "\n" );
   if( d->shortname )
-    printf( "New box: \"%s\" (%s)\n", d->shortname, d->longname );
+    fprintf(fout, "New box: \"%s\" (%s)\n", d->shortname, d->longname );
   else
     {
     char buffer[4+1];
     uint32_t swap = bswap_32( marker );
     memcpy( buffer, &swap, 4);
     buffer[4] = 0;
-    printf( "New box: \"%s\" (unknown box)\n", buffer );
-    printf( "\n  " );
+    fprintf(fout, "New box: \"%s\" (unknown box)\n", buffer );
+    fprintf(fout, "\n  " );
     len -= 8;
     for( ; len != 0; --len )
       {
       int val = fgetc(stream);
-      printf( "%02x ", val );
+      fprintf(fout, "%02x ", val );
       }
-      printf( "\n" );
+      fprintf(fout, "\n" );
     return false;
     }
 
@@ -997,34 +1010,25 @@ static void printsiz( FILE *stream, size_t len )
     s = "JPEG2000 profile 1";
     break;
     }
-  printf( "\n" );
-  printf( "  Required Capabilities          : %s\n", s );
-  printf( "  Reference Grid Size            : %ux%u\n", xsiz, ysiz );
-  printf( "  Image Offset                   : %ux%u\n", xosiz, yosiz );
-  printf( "  Reference Tile Size            : %ux%u\n", xtsiz, ytsiz );
-  printf( "  Reference Tile Offset          : %ux%u\n", xtosiz, ytosiz );
-  printf( "  Components                     : %u\n", csiz );
+  fprintf(fout, "\n" );
+  print_with_indent(indentlevel, "  Required Capabilities          : %s\n", s );
+  print_with_indent(indentlevel, "  Reference Grid Size            : %ux%u\n", xsiz, ysiz );
+  print_with_indent(indentlevel, "  Image Offset                   : %ux%u\n", xosiz, yosiz );
+  print_with_indent(indentlevel, "  Reference Tile Size            : %ux%u\n", xtsiz, ytsiz );
+  print_with_indent(indentlevel, "  Reference Tile Offset          : %ux%u\n", xtosiz, ytosiz );
+  print_with_indent(indentlevel, "  Components                     : %u\n", csiz );
 
   uint_fast16_t i = 0;
   for( i = 0; i < csiz; ++i )
     {
     b = read8(stream, &ssiz); assert( b ); /* int8_t ? */
     const bool sign = ssiz >> 7;
-    printf( "  Component #%u Depth             : %u\n", i, (ssiz & 0x7f) + 1 );
-    printf( "  Component #%u Signed            : %s\n", i, sign ? "yes" : "no" );
     b = read8(stream, &xrsiz); assert( b );
     b = read8(stream, &yrsiz); assert( b );
-    printf( "  Component #%u Sample Separation : %ux%u\n", i, xrsiz, yrsiz );
+    print_with_indent(indentlevel, "  Component #%u Depth             : %u\n", i, (ssiz & 0x7f) + 1 );
+    print_with_indent(indentlevel, "  Component #%u Signed            : %s\n", i, sign ? "yes" : "no" );
+    print_with_indent(indentlevel, "  Component #%u Sample Separation : %ux%u\n", i, xrsiz, yrsiz );
     }
-}
-
-void print_with_indent(int indent, const char * format, ...)
-{
-  va_list arg;
-  va_start(arg, format);
-  printf("%*s" "%s", indent, " ", "");
-  vprintf(format, arg);
-  va_end(arg);
 }
 
 static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
@@ -1050,9 +1054,9 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
   const dictentry *d = getdictentryfrommarker( marker );
   assert( offset >= 0 );
   assert( d->shortname );
-  printf( "\n" );
+  fprintf(fout, "\n" );
   print_with_indent( nspaces, "%-8u: New marker: %s (%s)", offset - rel_offset, d->shortname, d->longname );
-  printf("\n");
+  fprintf(fout,"\n");
   switch( marker )
     {
   case EOC:
@@ -1091,33 +1095,50 @@ int main(int argc, char *argv[])
   if( argc < 2 ) return 1;
   const char *filename = argv[1];
 
+  if( argc > 2 )
+    {
+    const char *outfilename = argv[2];
+    fout = fopen( outfilename, "w" );
+    }
+  else
+    {
+    fout = stdout;
+    }
+
   bool b;
   data_size = 0;
   file_size = getfilesize( filename );
   if( isjp2file( filename ) )
     {
-    printf("###############################################################\n" );
-    printf("# JP2 file format log file generated by jp2file.py            #\n" );
-    printf("# jp2file.py is copyrighted (c) 2001,2002                     #\n" );
-    printf("# by Algo Vision Technology GmbH, All Rights Reserved         #\n" );
-    printf("#                                                             #\n" );
-    printf("# http://www.av-technology.de/ jpeg2000@av-technology.de      #\n" );
-    printf("###############################################################\n" );
+    fprintf(fout,"###############################################################\n" );
+    fprintf(fout,"# JP2 file format log file generated by jp2file.py            #\n" );
+    fprintf(fout,"# jp2file.py is copyrighted (c) 2001,2002                     #\n" );
+    fprintf(fout,"# by Algo Vision Technology GmbH, All Rights Reserved         #\n" );
+    fprintf(fout,"#                                                             #\n" );
+    fprintf(fout,"# http://www.av-technology.de/ jpeg2000@av-technology.de      #\n" );
+    fprintf(fout,"###############################################################\n" );
 
+    indentlevel = 2;
     b = parsejp2( filename, &print2, &print1 );
     }
   else
     {
-    printf( "###############################################################\n" );
-    printf( "# JP2 codestream log file generated by jp2codestream.py       #\n" );
-    printf( "# jp2codestream.py is copyrighted (c) 2001,2002               #\n" );
-    printf( "# by Algo Vision Technology GmbH, All Rights Reserved         #\n" );
-    printf( "#                                                             #\n" );
-    printf( "# http://www.av-technology.de/ jpeg2000@av-technology.de      #\n" );
-    printf( "###############################################################\n" );
+    fprintf(fout, "###############################################################\n" );
+    fprintf(fout, "# JP2 codestream log file generated by jp2codestream.py       #\n" );
+    fprintf(fout, "# jp2codestream.py is copyrighted (c) 2001,2002               #\n" );
+    fprintf(fout, "# by Algo Vision Technology GmbH, All Rights Reserved         #\n" );
+    fprintf(fout, "#                                                             #\n" );
+    fprintf(fout, "# http://www.av-technology.de/ jpeg2000@av-technology.de      #\n" );
+    fprintf(fout, "###############################################################\n" );
 
     b = parsej2k( filename, &print1 );
     }
+
+  if( argc > 2 )
+    {
+    fclose( fout );
+    }
+
   if( !b ) return 1;
 
   return 0;

@@ -8,15 +8,26 @@
 #include <stdlib.h>
 /* strlen */
 #include <string.h>
+#include <stdarg.h> /* va_list */
 
 #include <simpleparser.h>
 
+FILE * fout;
 /*
 Options -
   -[No_]Tiles
     Tiles segment parameters are to be included (or not).
     The default is not to include tile segment parameters.  */
 static bool printtiles = false;
+
+void print_with_indent(int indent, const char * format, ...)
+{
+  va_list arg;
+  va_start(arg, format);
+  fprintf(fout,"%*s" "%s", indent, " ", "");
+  vfprintf(fout,format, arg);
+  va_end(arg);
+}
 
 typedef struct {
   uint16_t marker;
@@ -36,7 +47,7 @@ static const dictentry2 dict2[] = {
   { JP2H, "jp2h", "JP2_Header" },
   { JP2C, "jp2c", "Contiguous_Codestream" },
   { JP2 , "jp2" , "" },
-  { XML , "xml ", "XML box" },
+  { XML , "xml", "XML" },
   { IHDR, "ihdr", "Image_Header" },
   { COLR, "colr", "Colour_Specification" },
   { RES , "res", "Resolution" },
@@ -48,7 +59,7 @@ static const dictentry2 dict2[] = {
 static void print0a()
 {
   const char c = 0x0a;
-  printf("%c",c);
+  fprintf(fout,"%c",c);
 }
 
 static const dictentry2 * getdictentry2frommarker( uint_fast32_t marker )
@@ -202,24 +213,24 @@ static void printqcd( FILE *stream, size_t len )
   bool bquant = (sqcd & 0x7f) == 0;
   uint8_t quant = (sqcd & 0x1f);
   uint8_t nbits = (sqcd >> 5);
-  printf( "\t\t\t\t/*\n");
-  printf( "\t\t\t\t    Quantization:\n");
-  printf( "\t\t\t\t      %s\n", bquant ? "yes" : "None");
-  printf( "\t\t\t\t*/\n");
-  printf( "\t\t\t\tQuantization_Style = %u\n", quant);
-  printf( "\t\t\t\tTotal_Guard_Bits = %u\n",nbits);
-  printf( "\t\t\t\t/*\n");
-  printf( "\t\t\t\t    Reversible transform dynamic range exponent by sub-band.\n");
-  printf( "\t\t\t\t*/\n");
-  printf( "\t\t\t\tStep_Size = \n");
-  printf( "\t\t\t\t	(" );
+  fprintf(fout, "\t\t\t\t/*\n");
+  fprintf(fout, "\t\t\t\t    Quantization:\n");
+  fprintf(fout, "\t\t\t\t      %s\n", bquant ? "yes" : "None");
+  fprintf(fout, "\t\t\t\t*/\n");
+  fprintf(fout, "\t\t\t\tQuantization_Style = %u\n", quant);
+  fprintf(fout, "\t\t\t\tTotal_Guard_Bits = %u\n",nbits);
+  fprintf(fout, "\t\t\t\t/*\n");
+  fprintf(fout, "\t\t\t\t    Reversible transform dynamic range exponent by sub-band.\n");
+  fprintf(fout, "\t\t\t\t*/\n");
+  fprintf(fout, "\t\t\t\tStep_Size = \n");
+  fprintf(fout, "\t\t\t\t	(" );
 #if 0
   size_t i;
   for( i = 0; i != len; ++i )
     {
-    if( i ) printf( ", " );
+    if( i ) fprintf(fout, ", " );
     b = read8(stream, &sqcd); assert( b );
-    printf("%u", sqcd);
+    fprintf(fout,"%u", sqcd);
     }
 #endif
   int i;
@@ -231,8 +242,8 @@ static void printqcd( FILE *stream, size_t len )
       uint8_t val;
       b = read8(stream, &val); assert( b );
       const uint8_t exp = val >> 3;
-      if(i) printf( ", " );
-      printf( "%u", exp );
+      if(i) fprintf(fout, ", " );
+      fprintf(fout, "%u", exp );
       }
     }
   else
@@ -245,10 +256,10 @@ static void printqcd( FILE *stream, size_t len )
       const uint16_t mant = val & 0x7ff;
       const uint16_t exp = val >> 11;
 
-      printf( "\n  (%u, %u)", exp, mant );
+      fprintf(fout, "\n  (%u, %u)", exp, mant );
       }
     }
-  printf(")\n");
+  fprintf(fout,")\n");
 }
 
 static void printcod( FILE *stream, size_t len )
@@ -289,40 +300,40 @@ static void printcod( FILE *stream, size_t len )
   bool EPHPMarkerSegments   = (Scod & 0x04) != 0;
 #endif
 
-  printf( "\t\t\t\t/*\n" );
+  fprintf(fout, "\t\t\t\t/*\n" );
 #if 0
-  printf("\t\t\t Precinct size %s\n", (VariablePrecinctSize ? "defined for each resolution level" : "PPx = 15 and PPy = 15") );
-  printf("\t\t\t SOPMarkerSegments = %s used\n", (SOPMarkerSegments    ? "may be"   : "not") );
-  printf("\t\t\t EPHPMarkerSegments = %s used\n", (EPHPMarkerSegments   ? "shall be" : "not") );
+  fprintf(fout,"\t\t\t Precinct size %s\n", (VariablePrecinctSize ? "defined for each resolution level" : "PPx = 15 and PPy = 15") );
+  fprintf(fout,"\t\t\t SOPMarkerSegments = %s used\n", (SOPMarkerSegments    ? "may be"   : "not") );
+  fprintf(fout,"\t\t\t EPHPMarkerSegments = %s used\n", (EPHPMarkerSegments   ? "shall be" : "not") );
 #endif
 
-  printf( "\t\t\t\t    Entropy coder precincts:\n" );
+  fprintf(fout, "\t\t\t\t    Entropy coder precincts:\n" );
   if( VariablePrecinctSize )
-    printf( "\t\t\t\t      Precinct size defined in the Precinct_Size parameter.\n" );
+    fprintf(fout, "\t\t\t\t      Precinct size defined in the Precinct_Size parameter.\n" );
   else
-    printf( "\t\t\t\t      Precinct size = %u x %u\n", 0 , 0 );
-  printf( "\t\t\t\t      No SOP marker segments used\n" );
-  printf( "\t\t\t\t      No EPH marker used\n" );
-  printf( "\t\t\t\t*/\n" );
-  printf( "\t\t\t\tCoding_Style = 16#%u#\n", Scod );
+    fprintf(fout, "\t\t\t\t      Precinct size = %u x %u\n", 0 , 0 );
+  fprintf(fout, "\t\t\t\t      No SOP marker segments used\n" );
+  fprintf(fout, "\t\t\t\t      No EPH marker used\n" );
+  fprintf(fout, "\t\t\t\t*/\n" );
+  fprintf(fout, "\t\t\t\tCoding_Style = 16#%u#\n", Scod );
 
-  printf( "\t\t\t\t/*\n" );
-  printf( "\t\t\t\t    Progression order:\n" );
-  printf( "\t\t\t\t      %s\n", sProgressionOrder );
-  printf( "\t\t\t\t*/\n" );
-  printf( "\t\t\t\tProgression_Order = %u\n", ProgressionOrder );
-  printf( "\t\t\t\tTotal_Quality_Layers = %u\n", NumberOfLayers );
-  printf( "\t\t\t\tMultiple_Component_Transform = %u\n", MultipleComponentTransformation );
-  printf( "\t\t\t\tTotal_Resolution_Levels = %u\n", NumberOfDecompositionLevels + 1 );
-  printf( "\t\t\t\t/*\n" );
-  printf( "\t\t\t\t    Code-block width exponent offset %u.\n", CodeBlockWidth );
-  printf( "\t\t\t\t*/\n" );
-  printf( "\t\t\t\tCode_Block_Width = %u\n", 1 << CodeBlockWidth+2 );
-  printf( "\t\t\t\t/*\n" );
-  printf( "\t\t\t\t    Code-block height exponent offset %u.\n", CodeBlockHeight );
-  printf( "\t\t\t\t*/\n" );
-  printf( "\t\t\t\tCode_Block_Height = %u\n", 1 << CodeBlockHeight+2 );
-  printf( "\t\t\t\t/*\n" );
+  fprintf(fout, "\t\t\t\t/*\n" );
+  fprintf(fout, "\t\t\t\t    Progression order:\n" );
+  fprintf(fout, "\t\t\t\t      %s\n", sProgressionOrder );
+  fprintf(fout, "\t\t\t\t*/\n" );
+  fprintf(fout, "\t\t\t\tProgression_Order = %u\n", ProgressionOrder );
+  fprintf(fout, "\t\t\t\tTotal_Quality_Layers = %u\n", NumberOfLayers );
+  fprintf(fout, "\t\t\t\tMultiple_Component_Transform = %u\n", MultipleComponentTransformation );
+  fprintf(fout, "\t\t\t\tTotal_Resolution_Levels = %u\n", NumberOfDecompositionLevels + 1 );
+  fprintf(fout, "\t\t\t\t/*\n" );
+  fprintf(fout, "\t\t\t\t    Code-block width exponent offset %u.\n", CodeBlockWidth );
+  fprintf(fout, "\t\t\t\t*/\n" );
+  fprintf(fout, "\t\t\t\tCode_Block_Width = %u\n", 1 << CodeBlockWidth+2 );
+  fprintf(fout, "\t\t\t\t/*\n" );
+  fprintf(fout, "\t\t\t\t    Code-block height exponent offset %u.\n", CodeBlockHeight );
+  fprintf(fout, "\t\t\t\t*/\n" );
+  fprintf(fout, "\t\t\t\tCode_Block_Height = %u\n", 1 << CodeBlockHeight+2 );
+  fprintf(fout, "\t\t\t\t/*\n" );
 
 #if 0
   /* Table A.19 - Code-block style for the SPcod and SPcoc parameters */
@@ -334,62 +345,62 @@ static void printcod( FILE *stream, size_t len )
   bool SegmentationSymbolsAreUsed                      = (CodeBlockStyle & 0x20) != 0;
 #endif
 
-  printf( "\t\t\t\t    Code-block style:\n" );
-  printf( "\t\t\t\t      No selective arithmetic coding bypass.\n" );
-  printf( "\t\t\t\t      No reset of context probabilities on coding pass boundaries.\n" );
-  printf( "\t\t\t\t      No termination on each coding pass.\n" );
-  printf( "\t\t\t\t      No verticallly causal context.\n" );
-  printf( "\t\t\t\t      No predictable termination.\n" );
-  printf( "\t\t\t\t      No segmentation symbols are used.\n" );
-  printf( "\t\t\t\t*/\n" );
-  printf( "\t\t\t\tCode_Block_Style = 16#%u#\n", CodeBlockStyle );
+  fprintf(fout, "\t\t\t\t    Code-block style:\n" );
+  fprintf(fout, "\t\t\t\t      No selective arithmetic coding bypass.\n" );
+  fprintf(fout, "\t\t\t\t      No reset of context probabilities on coding pass boundaries.\n" );
+  fprintf(fout, "\t\t\t\t      No termination on each coding pass.\n" );
+  fprintf(fout, "\t\t\t\t      No verticallly causal context.\n" );
+  fprintf(fout, "\t\t\t\t      No predictable termination.\n" );
+  fprintf(fout, "\t\t\t\t      No segmentation symbols are used.\n" );
+  fprintf(fout, "\t\t\t\t*/\n" );
+  fprintf(fout, "\t\t\t\tCode_Block_Style = 16#%u#\n", CodeBlockStyle );
 
-  printf( "\t\t\t\t/*\n" );
-  printf( "\t\t\t\t    Wavelet transformation used:\n" );
-  printf( "\t\t\t\t      %s.\n", sTransformation );
-  printf( "\t\t\t\t*/\n" );
-  printf( "\t\t\t\tTransform = %u\n", Transformation );
+  fprintf(fout, "\t\t\t\t/*\n" );
+  fprintf(fout, "\t\t\t\t    Wavelet transformation used:\n" );
+  fprintf(fout, "\t\t\t\t      %s.\n", sTransformation );
+  fprintf(fout, "\t\t\t\t*/\n" );
+  fprintf(fout, "\t\t\t\tTransform = %u\n", Transformation );
 
   if( VariablePrecinctSize )
     {
     uint8_t N = *p++;
     uint_fast8_t i;
-    printf( "\t\t\t\t/*\n" );
-    printf( "\t\t\t\t    Precinct (width, height) by resolution level.\n" );
-    printf( "\t\t\t\t*/\n" );
-    printf( "\t\t\t\tPrecinct_Size = \n", ProgressionOrder, sProgressionOrder );
-    printf( "\t\t\t\t\t(\n" );
+    fprintf(fout, "\t\t\t\t/*\n" );
+    fprintf(fout, "\t\t\t\t    Precinct (width, height) by resolution level.\n" );
+    fprintf(fout, "\t\t\t\t*/\n" );
+    fprintf(fout, "\t\t\t\tPrecinct_Size = \n", ProgressionOrder, sProgressionOrder );
+    fprintf(fout, "\t\t\t\t\t(\n" );
     for( i = 0; i < NumberOfDecompositionLevels; ++i )
       {
       uint8_t val = *p++;
       /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
       uint8_t width = val & 0x0f;
       uint8_t height = val >> 4;
-      printf( "\t\t\t\t\t\t(%u, %u)", 1 << width, 1 << height );
+      fprintf(fout, "\t\t\t\t\t\t(%u, %u)", 1 << width, 1 << height );
       if( i == NumberOfDecompositionLevels - 1 )
-        printf( ")\n" );
+        fprintf(fout, ")\n" );
       else
-        printf( ",\n" );
+        fprintf(fout, ",\n" );
       }
     }
 
 #if 0
-  printf( "\t\tProgressionOrder = 0x%x (%s progression)\n", ProgressionOrder, sProgressionOrder );
-  printf( "\t\tNumberOfLayers = %u\n", NumberOfLayers );
-  printf( "\t\tMultipleComponentTransformation = 0x%x (%s)\n", MultipleComponentTransformation, sMultipleComponentTransformation );
-  printf( "\t\tNumberOfDecompositionLevels = %u\n", NumberOfDecompositionLevels );
-  printf( "\t\tCodeBlockWidth = 0x%x\n", CodeBlockWidth );
-  printf( "\t\tCodeBlockHeight = 0x%x\n", CodeBlockHeight );
-  printf( "\t\tCodeBlockStyle = 0x%x\n", CodeBlockStyle );
+  fprintf(fout, "\t\tProgressionOrder = 0x%x (%s progression)\n", ProgressionOrder, sProgressionOrder );
+  fprintf(fout, "\t\tNumberOfLayers = %u\n", NumberOfLayers );
+  fprintf(fout, "\t\tMultipleComponentTransformation = 0x%x (%s)\n", MultipleComponentTransformation, sMultipleComponentTransformation );
+  fprintf(fout, "\t\tNumberOfDecompositionLevels = %u\n", NumberOfDecompositionLevels );
+  fprintf(fout, "\t\tCodeBlockWidth = 0x%x\n", CodeBlockWidth );
+  fprintf(fout, "\t\tCodeBlockHeight = 0x%x\n", CodeBlockHeight );
+  fprintf(fout, "\t\tCodeBlockStyle = 0x%x\n", CodeBlockStyle );
 
-  printf( "\t\t\t %s arithmetic coding bypass\n", (SelectiveArithmeticCodingBypass                  ? "Selective"    : "No selective") );
-  printf( "\t\t\t %s context probabilities on coding pass boundaries\n", (ResetContextProbabilitiesOnCodingPassBoundaries  ? "Reset"        : "No reset of"));
-  printf( "\t\t\t %s on each coding pass\n", (TerminationOnEachCodingPass                      ? "Termination"  : "No termination"));
-  printf( "\t\t\t %s causal context\n", (VerticallyCausalContext                          ? "Vertically"   : "No vertically"));
-  printf( "\t\t\t %s termination\n", (PredictableTermination                           ? "Predictable"  : "No predictable"));
-  printf( "\t\t\t %s symbols are used\n", (SegmentationSymbolsAreUsed                       ? "Segmentation" : "No segmentation"));
-  printf( "\t\tWaveletTransformation = 0x%x (%s)\n", Transformation, sTransformation );
-  printf( "\n" );
+  fprintf(fout, "\t\t\t %s arithmetic coding bypass\n", (SelectiveArithmeticCodingBypass                  ? "Selective"    : "No selective") );
+  fprintf(fout, "\t\t\t %s context probabilities on coding pass boundaries\n", (ResetContextProbabilitiesOnCodingPassBoundaries  ? "Reset"        : "No reset of"));
+  fprintf(fout, "\t\t\t %s on each coding pass\n", (TerminationOnEachCodingPass                      ? "Termination"  : "No termination"));
+  fprintf(fout, "\t\t\t %s causal context\n", (VerticallyCausalContext                          ? "Vertically"   : "No vertically"));
+  fprintf(fout, "\t\t\t %s termination\n", (PredictableTermination                           ? "Predictable"  : "No predictable"));
+  fprintf(fout, "\t\t\t %s symbols are used\n", (SegmentationSymbolsAreUsed                       ? "Segmentation" : "No segmentation"));
+  fprintf(fout, "\t\tWaveletTransformation = 0x%x (%s)\n", Transformation, sTransformation );
+  fprintf(fout, "\n" );
 #endif
   assert( p == end );
 }
@@ -399,23 +410,23 @@ static void printstring( const char *in, const char *ref )
   assert( in );
   assert( ref );
   size_t len = strlen( ref );
-  printf("%s", in);
+  fprintf(fout,"%s", in);
   if( len < 4 )
     {
     int l;
-    printf("\"");
-    printf("%s", ref);
+    fprintf(fout,"\"");
+    fprintf(fout,"%s", ref);
     for( l = 0; l < 4 - (int)len; ++l )
       {
-      printf(" ");
+      fprintf(fout," ");
       }
-    printf("\"");
+    fprintf(fout,"\"");
     }
   else
     {
-    printf("%s", ref);
+    fprintf(fout,"%s", ref);
     }
-    printf("\n");
+    fprintf(fout,"\n");
 }
 
 /* I.5.1 JPEG 2000 Signature box */
@@ -424,7 +435,7 @@ static void printsignature( FILE * stream )
   uint32_t s;
   bool b = read32(stream, &s);
   assert( b );
-  printf("\t\tSignature = 16#%X#\n", s );
+  fprintf(fout,"\t\tSignature = 16#%X#\n", s );
 }
 
 static const char * getbrand( uint_fast32_t br )
@@ -455,12 +466,12 @@ static void printfiletype( FILE * stream, size_t len )
   /* Table I.3 - Legal Brand values */
   const char *brand = getbrand( br );
   printstring("\t\tBrand = ", brand );
-  printf("\t\tMinor_Version = %u\n", minv );
+  fprintf(fout,"\t\tMinor_Version = %u\n", minv );
   int i;
   for (i = 0; i < n; ++i )
     {
     b = read32(stream, &cl); assert( b );
-    printf("\t\tCompatibility = \n\t\t\t{\"%s \"}\n", brand );
+    fprintf(fout,"\t\tCompatibility = \n\t\t\t{\"%s \"}\n", brand );
     }
 }
 
@@ -485,17 +496,17 @@ static void printimageheaderbox( FILE * stream , size_t fulllen )
   b = read8(stream, &Unk); assert( b );
   b = read8(stream, &IPR); assert( b );
 
-  printf("\t\t\tHeight = %u <rows>\n", height );
-  printf("\t\t\tWidth = %u <columns>\n", width);
-  printf("\t\t\tTotal_Components = %u\n", nc);
-  printf("\t\t\t/*\n\t\t\t    Negative bits indicate signed values of abs (bits);\n");
-  printf("\t\t\t      Zero bits indicate variable number of bits.\n");
-  printf("\t\t\t*/\n");
-  printf("\t\t\tValue_Bits = \n" );
-  printf("\t\t\t\t(%u)\n", bpc + 1);
-  printf("\t\t\tCompression_Type = %u\n", c);
-  printf("\t\t\tColorspace_Unknown = %s\n", Unk ? "true" : "false");
-  printf("\t\t\tIntellectual_Property_Rights = %s\n", IPR ? "true" : "false");
+  fprintf(fout,"\t\t\tHeight = %u <rows>\n", height );
+  fprintf(fout,"\t\t\tWidth = %u <columns>\n", width);
+  fprintf(fout,"\t\t\tTotal_Components = %u\n", nc);
+  fprintf(fout,"\t\t\t/*\n\t\t\t    Negative bits indicate signed values of abs (bits);\n");
+  fprintf(fout,"\t\t\t      Zero bits indicate variable number of bits.\n");
+  fprintf(fout,"\t\t\t*/\n");
+  fprintf(fout,"\t\t\tValue_Bits = \n" );
+  fprintf(fout,"\t\t\t\t(%u)\n", bpc + 1);
+  fprintf(fout,"\t\t\tCompression_Type = %u\n", c);
+  fprintf(fout,"\t\t\tColorspace_Unknown = %s\n", Unk ? "true" : "false");
+  fprintf(fout,"\t\t\tIntellectual_Property_Rights = %s\n", IPR ? "true" : "false");
 
 }
 
@@ -526,10 +537,10 @@ static void printcolourspec( FILE *stream, size_t len )
   int v = fseeko(stream, (off_t)len, SEEK_CUR);
     }
  
-  printf("\t\t\tSpecification_Method = %u\n", meth);
-  printf("\t\t\tPrecedence = %u\n", prec);
-  printf("\t\t\tColourspace_Approximation = %u\n", approx);
-  printf("\t\t\tEnumerated_Colourspace = %u\n", enumCS);
+  fprintf(fout,"\t\t\tSpecification_Method = %u\n", meth);
+  fprintf(fout,"\t\t\tPrecedence = %u\n", prec);
+  fprintf(fout,"\t\t\tColourspace_Approximation = %u\n", approx);
+  fprintf(fout,"\t\t\tEnumerated_Colourspace = %u\n", enumCS);
 }
 
 /* I.5.3 JP2 Header box (superbox) */
@@ -549,10 +560,10 @@ static void printheaderbox( FILE * stream , size_t fulllen )
     off_t offset = ftello(stream);
     const dictentry2 *d = getdictentry2frommarker( marker );
     printstring( "\t\tGROUP = ", d->shortname );
-    printf("\t\t\tName = %s\n", d->longname );
-    printf("\t\t\tType = 16#%X#\n", marker );
-    printf("\t\t\t^Position = %td <byte offset>\n", offset - 8 );
-    printf("\t\t\tLength = %u <bytes>\n", len );
+    fprintf(fout,"\t\t\tName = %s\n", d->longname );
+    fprintf(fout,"\t\t\tType = 16#%X#\n", marker );
+    fprintf(fout,"\t\t\t^Position = %td <byte offset>\n", offset - 8 );
+    fprintf(fout,"\t\t\tLength = %u <bytes>\n", len );
     switch( marker )
       {
     case IHDR:
@@ -567,7 +578,7 @@ static void printheaderbox( FILE * stream , size_t fulllen )
     default:
       assert( 0 ); /* TODO */
       }
-    printf("\t\tEND_GROUP\n" );
+    fprintf(fout,"\t\tEND_GROUP\n" );
     }
 }
 
@@ -578,7 +589,7 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
   if( d->shortname )
     {
     printstring( "\tGROUP = ", d->shortname );
-    printf("\t\tName = %s\n", d->longname );
+    fprintf(fout,"\t\tName = %s\n", d->longname );
     }
   else
     {
@@ -587,16 +598,16 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
     memcpy( buffer, &swap, 4);
     buffer[4] = 0;
     printstring( "\tGROUP = ", buffer );
-    printf("\t\tName = %s\n", "Unknown" );
+    fprintf(fout,"\t\tName = %s\n", "Unknown" );
 
     }
-	printf("\t\tType = 16#%X#\n", (uint32_t)marker );
-	printf("\t\t^Position = %td <byte offset>\n", offset - 8 );
-	printf("\t\tLength = %zd <bytes>\n", len );
+	fprintf(fout,"\t\tType = 16#%X#\n", (uint32_t)marker );
+	fprintf(fout,"\t\t^Position = %td <byte offset>\n", offset - 8 );
+	fprintf(fout,"\t\tLength = %zd <bytes>\n", len );
   if( !d->shortname )
     {
-    printf("\t\t^Data_Position = %zd <byte offset>\n", offset );
-    printf("\t\tData_Length = %zd <bytes>\n", len - 8 );
+    fprintf(fout,"\t\t^Data_Position = %zd <byte offset>\n", offset );
+    fprintf(fout,"\t\tData_Length = %zd <bytes>\n", len - 8 );
     }
   bool skip = false;
   assert( len >= 8 );
@@ -612,14 +623,14 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
     printheaderbox( stream, len - 8 );
     break;
   case JP2C:
-    printf("\t\t^Data_Position = %zd <byte offset>\n", offset );
-    printf("\t\tData_Length = %zd <bytes>\n", len - 8 );
-    printf("\t\tGROUP = Codestream\n" );
+    fprintf(fout,"\t\t^Data_Position = %zd <byte offset>\n", offset );
+    fprintf(fout,"\t\tData_Length = %zd <bytes>\n", len - 8 );
+    fprintf(fout,"\t\tGROUP = Codestream\n" );
   default:
     skip = true;
     }
   if( marker != JP2C )
-    printf("\tEND_GROUP\n" );
+    fprintf(fout,"\tEND_GROUP\n" );
   return skip;
 }
 
@@ -634,13 +645,13 @@ static void printsot( FILE *stream, size_t len )
   b = read32(stream, &Psot); assert( b );
   b = read8(stream, &TPsot); assert( b );
   b = read8(stream, &TNsot); assert( b );
-  printf("\t\t\t\tTile_Index = %u\n", Isot );
-  printf("\t\t\t\tTile_Part_Length = %u <bytes>\n", Psot );
-  printf("\t\t\t\tTile_Part_Index = %u\n", TPsot );
+  fprintf(fout,"\t\t\t\tTile_Index = %u\n", Isot );
+  fprintf(fout,"\t\t\t\tTile_Part_Length = %u <bytes>\n", Psot );
+  fprintf(fout,"\t\t\t\tTile_Part_Index = %u\n", TPsot );
   if( TNsot || printtiles )
-    printf("\t\t\t\tTotal_Tile_Parts = %u\n", TNsot );
+    fprintf(fout,"\t\t\t\tTotal_Tile_Parts = %u\n", TNsot );
   else
-    printf("\t\t\t\tTotal_Tile_Parts  unknown\n" );
+    fprintf(fout,"\t\t\t\tTotal_Tile_Parts  unknown\n" );
 }
 
 static void printsize( FILE *stream, size_t len )
@@ -670,20 +681,20 @@ static void printsize( FILE *stream, size_t len )
   b = read32(stream, &ytosiz); assert( b );
   b = read16(stream, &csiz); assert( b );
 
-  printf("\t\t\t\tCapability = 16#%X#\n", rsiz );
-  printf( "\t\t\t\tReference_Grid_Width = %u\n", xsiz);
-  printf( "\t\t\t\tReference_Grid_Height = %u\n", ysiz);
-  printf( "\t\t\t\tHorizontal_Image_Offset = %u\n", xosiz);
-  printf( "\t\t\t\tVertical_Image_Offset = %u\n", yosiz);
-  printf( "\t\t\t\tTile_Width = %u\n",xtsiz);
-  printf( "\t\t\t\tTile_Height = %u\n",ytsiz);
-  printf( "\t\t\t\tHorizontal_Tile_Offset = %u\n",xtosiz);
-  printf( "\t\t\t\tVertical_Tile_Offset = %u\n",ytosiz);
-  printf( "\t\t\t\tTotal_Components = %u\n",csiz);
-  printf( "\t\t\t\t/*\n");
-  printf( "\t\t\t\t    Negative bits indicate signed values of abs (bits);\n");
-  printf( "\t\t\t\t      Zero bits indicate variable number of bits.\n");
-  printf( "\t\t\t\t*/\n");
+  fprintf(fout,"\t\t\t\tCapability = 16#%X#\n", rsiz );
+  fprintf(fout, "\t\t\t\tReference_Grid_Width = %u\n", xsiz);
+  fprintf(fout, "\t\t\t\tReference_Grid_Height = %u\n", ysiz);
+  fprintf(fout, "\t\t\t\tHorizontal_Image_Offset = %u\n", xosiz);
+  fprintf(fout, "\t\t\t\tVertical_Image_Offset = %u\n", yosiz);
+  fprintf(fout, "\t\t\t\tTile_Width = %u\n",xtsiz);
+  fprintf(fout, "\t\t\t\tTile_Height = %u\n",ytsiz);
+  fprintf(fout, "\t\t\t\tHorizontal_Tile_Offset = %u\n",xtosiz);
+  fprintf(fout, "\t\t\t\tVertical_Tile_Offset = %u\n",ytosiz);
+  fprintf(fout, "\t\t\t\tTotal_Components = %u\n",csiz);
+  fprintf(fout, "\t\t\t\t/*\n");
+  fprintf(fout, "\t\t\t\t    Negative bits indicate signed values of abs (bits);\n");
+  fprintf(fout, "\t\t\t\t      Zero bits indicate variable number of bits.\n");
+  fprintf(fout, "\t\t\t\t*/\n");
   uint_fast16_t i = 0;
   assert( csiz < 4 );
   uint8_t vb[3];
@@ -700,31 +711,31 @@ static void printsize( FILE *stream, size_t len )
     b = read8(stream, yrsiz); assert( b );
     }
   /* dump out */
-  printf( "\t\t\t\tValue_Bits = \n");
-  printf( "\t\t\t\t	(");
+  fprintf(fout, "\t\t\t\tValue_Bits = \n");
+  fprintf(fout, "\t\t\t\t	(");
   for( i = 0; i < csiz; ++i )
     {
-    if( i ) printf(", ");
-    printf("%u", vb[i] + 1);
+    if( i ) fprintf(fout,", ");
+    fprintf(fout,"%u", vb[i] + 1);
     }
-  printf(")\n");
+  fprintf(fout,")\n");
 
-  printf( "\t\t\t\tHorizontal_Sample_Spacing = \n");
-  printf( "\t\t\t\t	(");
+  fprintf(fout, "\t\t\t\tHorizontal_Sample_Spacing = \n");
+  fprintf(fout, "\t\t\t\t	(");
   for( i = 0; i < csiz; ++i )
     {
-    if( i ) printf(", ");
-    printf( "%u", hss[i]);
+    if( i ) fprintf(fout,", ");
+    fprintf(fout, "%u", hss[i]);
     }
-  printf( ")\n");
-  printf( "\t\t\t\tVertical_Sample_Spacing = \n");
-  printf( "\t\t\t\t	(");
+  fprintf(fout, ")\n");
+  fprintf(fout, "\t\t\t\tVertical_Sample_Spacing = \n");
+  fprintf(fout, "\t\t\t\t	(");
   for( i = 0; i < csiz; ++i )
     {
-    if( i ) printf(", ");
-    printf( "%u", vss[i]);
+    if( i ) fprintf(fout,", ");
+    fprintf(fout, "%u", vss[i]);
     }
-  printf(")\n");
+  fprintf(fout,")\n");
 }
 
 static void printcomment( FILE *stream, size_t len )
@@ -740,8 +751,8 @@ static void printcomment( FILE *stream, size_t len )
   size_t l = fread(buffer,sizeof(char),len,stream);
   buffer[len] = 0;
   assert( l == len );
-  printf("\t\t\t\tData_Type = %u\n", rcom );
-  printf("\t\t\t\tText_Data = \"%s\"\n", buffer );
+  fprintf(fout,"\t\t\t\tData_Type = %u\n", rcom );
+  fprintf(fout,"\t\t\t\tText_Data = \"%s\"\n", buffer );
 }
 
 static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
@@ -772,9 +783,9 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
     buffer[4] = 0;
     printstring( "\t\t\tGROUP = ", buffer );
     }
-	printf("\t\t\t\tMarker = 16#%X#\n", (uint16_t)marker );
-	printf("\t\t\t\t^Position = %td <byte offset>\n", offset );
-	printf("\t\t\t\tLength = %zd <bytes>\n", len );
+	fprintf(fout,"\t\t\t\tMarker = 16#%X#\n", (uint16_t)marker );
+	fprintf(fout,"\t\t\t\t^Position = %td <byte offset>\n", offset );
+	fprintf(fout,"\t\t\t\tLength = %zd <bytes>\n", len );
   bool skip = false;
   switch( marker )
     {
@@ -794,15 +805,15 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
     printsot( stream, len );
     break;
   case PLT:
-    printf("\t\t\t\tIndex = %zd <bytes>\n", len );
-    printf("\t\t\t\tPacket_Length = %zd <bytes>\n", len );
-    printf("\t\t\t\t()\n" );
+    fprintf(fout,"\t\t\t\tIndex = %zd <bytes>\n", len );
+    fprintf(fout,"\t\t\t\tPacket_Length = %zd <bytes>\n", len );
+    fprintf(fout,"\t\t\t\t()\n" );
   case EOC:
   default:
     skip = true;
     }
   if( marker != SOT )
-    printf("\t\t\tEND_GROUP\n" );
+    fprintf(fout,"\t\t\tEND_GROUP\n" );
 
   return skip;
 }
@@ -812,7 +823,17 @@ int main(int argc, char *argv[])
   if( argc < 2 ) return 1;
   const char *filename = argv[1];
 
-  if( argc == 3 )
+  if( argc > 2 )
+    {
+    const char *outfilename = argv[2];
+    fout = fopen( outfilename, "w" );
+    }
+  else
+    {
+    fout = stdout;
+    }
+
+  if( argc == 4 )
     {
     printtiles = true;
     }
@@ -826,38 +847,38 @@ int main(int argc, char *argv[])
   if( isjp2 )
     {
 /* Compat with PIRL 2.3.4 */
-/*    printf("%c",c);
-    printf(">>> WARNING <<< Incomplete JPEG2000 codestream.");
-    printf("%c",c);
-    printf("%c",c);
-    printf("    End of Codestream marker not found.");
-    printf("%c",c);
-    printf("%c",c);
+/*    fprintf(fout,"%c",c);
+    fprintf(fout,">>> WARNING <<< Incomplete JPEG2000 codestream.");
+    fprintf(fout,"%c",c);
+    fprintf(fout,"%c",c);
+    fprintf(fout,"    End of Codestream marker not found.");
+    fprintf(fout,"%c",c);
+    fprintf(fout,"%c",c);
 */
     }
-  printf("GROUP = %s", fullpath);
+  fprintf(fout,"GROUP = %s", fullpath);
   free( fullpath );
-  printf("%c",c);
+  fprintf(fout,"%c",c);
   if( isjp2 )
     {
-    printf("	/*");
-    printf("%c",c);
-    printf("	    Total source file length.");
-    printf("%c",c);
-    printf("	*/");
-    printf("%c",c);
-    printf("	Data_Length = %td <bytes>", size);
+    fprintf(fout,"	/*");
+    fprintf(fout,"%c",c);
+    fprintf(fout,"	    Total source file length.");
+    fprintf(fout,"%c",c);
+    fprintf(fout,"	*/");
+    fprintf(fout,"%c",c);
+    fprintf(fout,"	Data_Length = %td <bytes>", size);
     print0a();
 
     b = parsejp2( filename, &print2, &print1 );
-    printf("\tEND_GROUP\n");
+    fprintf(fout,"\tEND_GROUP\n");
     }
   else
     {
     b = parsej2k( filename, &print1 );
     }
   if( !b ) return 1;
-  printf("END_GROUP");
+  fprintf(fout,"END_GROUP");
 
   return 0;
 }

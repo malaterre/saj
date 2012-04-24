@@ -933,6 +933,21 @@ int main(int argc, char *argv[])
 {
   if( argc < 2 ) return 1;
   std::ifstream cin( argv[1], std::ios::binary );
+
+  std::ostream *pout = NULL;
+  std::ofstream fileout;
+  if( argc > 2 )
+    {
+    const char *outfilename = argv[2];
+    fileout.open( outfilename );
+    pout = &fileout;
+    }
+  else
+    {
+    pout = &std::cout;
+    }
+  std::ostream &fout = *pout;
+
   JPEGMarkerDictionary dict;
 
   bool doing_jpegls=false;
