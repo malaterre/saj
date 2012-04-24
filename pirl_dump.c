@@ -50,6 +50,9 @@ static const dictentry2 dict2[] = {
   { XML , "xml", "XML" },
   { IHDR, "ihdr", "Image_Header" },
   { COLR, "colr", "Colour_Specification" },
+  { CDEF, "cdef", "Channel_Definition" },
+  { CMAP, "cmap", "Component_Mapping" },
+  { PCLR, "pclr", "Palette" },
   { RES , "res", "Resolution" },
 //  { IPTR, "iptr", "Unknown" }, /* FIXME */
 
@@ -153,7 +156,7 @@ static const char *getDescriptionOfProgressionOrderString(uint8_t progressionOrd
       descriptionOfProgressionOrder = "Layer-Resolution-Component-Position";
       break;
     case 0x01:
-      descriptionOfProgressionOrder = "Resolution level-layer-component-position";
+      descriptionOfProgressionOrder = "Resolution-Layer-Component-Position";
       break;
     case 0x02:
       descriptionOfProgressionOrder = "Resolution-Position-Component-Layer";
@@ -426,7 +429,7 @@ static void printstring( const char *in, const char *ref )
     {
     fprintf(fout,"%s", ref);
     }
-    fprintf(fout,"\n");
+  fprintf(fout,"\n");
 }
 
 /* I.5.1 JPEG 2000 Signature box */
@@ -454,18 +457,21 @@ static const char * getbrand( uint_fast32_t br )
 /* I.5.2 File Type box */
 static void printfiletype( FILE * stream, size_t len )
 {
-  uint32_t br;
+  char br[4+1];
+  br[4] = 0;
+
   uint32_t minv;
   uint32_t cl;
-  bool b = read32(stream, &br); assert( b );
+  bool b = true;
+  fread(br,4,1,stream); assert( b );
   b = read32(stream, &minv); assert( b );
-
   /* The number of CLi fields is determined by the length of this box. */
   int n = (len - 8 ) / 4;
 
   /* Table I.3 - Legal Brand values */
-  const char *brand = getbrand( br );
-  printstring("\t\tBrand = ", brand );
+  const char *brand = br;
+  if( brand )
+    printstring("\t\tBrand = ", brand );
   fprintf(fout,"\t\tMinor_Version = %u\n", minv );
   int i;
   for (i = 0; i < n; ++i )
@@ -510,6 +516,82 @@ static void printimageheaderbox( FILE * stream , size_t fulllen )
 
 }
 
+static void printcdef( FILE *stream, size_t len )
+{
+  len -= 8;
+  uint16_t N;
+
+  bool b;
+  b = read16(stream, &N); assert( b );
+
+  uint_fast16_t i;
+  uint16_t cni;
+  uint16_t typi;
+  uint16_t asoci;
+  fprintf( fout, "\t\t\tEntries = %x\n", N );
+  fprintf( fout, "\t\t\t/*\n" );
+  fprintf( fout, "\t\t\t\t\tChannel definition entries:\n" );
+  fprintf( fout, "\t\t\t\t\t\tChannel index,\n" );
+  fprintf( fout, "\t\t\t\t\t\tChannel type,\n" );
+  fprintf( fout, "\t\t\t\t\t\tChannel association\n" );
+  fprintf( fout, "\t\t\t*/\n" );
+  fprintf( fout, "\t\t\tMap = \n" );
+  fprintf( fout, "\t\t\t\t(\n" );
+  for (i = 0; i < N; ++i )
+    {
+    b = read16(stream, &cni); assert( b );
+    b = read16(stream, &typi); assert( b );
+    b = read16(stream, &asoci); assert( b );
+    fprintf(fout,"\t\t\t\t\t(%x, ",  cni );
+    fprintf(fout,"%x, ",  typi );
+    fprintf(fout,"%x)",  asoci );
+    if( i != N - 1 ) fprintf(fout,"," );
+    else fprintf(fout,")" );
+    fprintf(fout,"\n" );
+    }
+}
+
+static void printcmap( FILE *stream, size_t len )
+{
+  len -= 8;
+  int n = len / 4;
+  bool b;
+  uint16_t CMPi;
+  uint8_t MTYPi;
+  uint8_t PCOLi;
+  int i;
+  fprintf( fout, "\t\t\t/*\n" );
+  fprintf( fout, "\t\t\t\t\tMap entries:\n" );
+  fprintf( fout, "\t\t\t\t\t\tComponent index,\n" );
+  fprintf( fout, "\t\t\t\t\t\tMap type,\n" );
+  fprintf( fout, "\t\t\t\t\t\tPalette index\n" );
+  fprintf( fout, "\t\t\t*/\n" );
+  fprintf( fout, "\t\t\tMap = \n" );
+  fprintf( fout, "\t\t\t\t(\n" );
+  for( i = 0; i < n; ++i )
+    {
+    b = read16(stream, &CMPi); assert( b );
+    len--;
+    len--;
+    b = read8(stream, &MTYPi); assert( b );
+    len--;
+    b = read8(stream, &PCOLi); assert( b );
+    len--;
+    //fprintf(fout, "  Component      #%d: %u\n", i, CMPi );
+    //fprintf(fout, "  Mapping Type   #%d: %s\n", i, MTYPi ? "palette mapping" : "wazzza" );
+    //fprintf(fout, "  Palette Column #%d: %u\n", i, PCOLi );
+
+    fprintf(fout,"\t\t\t\t\t(%x, ",  CMPi );
+    fprintf(fout,"%x, ",  MTYPi );
+    fprintf(fout,"%x)",  PCOLi );
+    if( i != n - 1 ) fprintf(fout,"," );
+    else fprintf(fout,")" );
+    fprintf(fout,"\n" );
+
+    }
+  assert( len == 0 );
+}
+
 /* I.5.3.3 Colour Specification box */
 static void printcolourspec( FILE *stream, size_t len )
 {
@@ -543,6 +625,30 @@ static void printcolourspec( FILE *stream, size_t len )
   fprintf(fout,"\t\t\tEnumerated_Colourspace = %u\n", enumCS);
 }
 
+/* I.7.1 XML boxes */
+static void printxml( FILE * stream, size_t len )
+{
+  fprintf(fout, "\t\tText = \"" );
+  for( ; len != 0; --len )
+    {
+    int val = fgetc(stream);
+    if( val == '"' || val == '\'' ) fprintf(fout, "\\" );
+    if( val == 0xd ) /* cr */
+      {
+      fprintf(fout, "\\r" );
+      }
+    else if( val == 0x9 ) /* ht */
+      {
+      fprintf(fout, "\\t" );
+      }
+    else
+      {
+      fprintf(fout, "%c", val );
+      }
+    }
+  fprintf(fout, "\"\n");
+}
+
 /* I.5.3 JP2 Header box (superbox) */
 static void printheaderbox( FILE * stream , size_t fulllen )
 {
@@ -572,7 +678,14 @@ static void printheaderbox( FILE * stream , size_t fulllen )
     case COLR:
       printcolourspec( stream, len );
       break;
+    case CDEF:
+      printcdef( stream, len );
+      break;
+    case CMAP:
+      printcmap( stream, len );
+      break;
     case RES:
+    case PCLR:
       fseeko( stream, len - 8, SEEK_CUR );
       break;
     default:
@@ -621,6 +734,9 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
     break;
   case JP2H:
     printheaderbox( stream, len - 8 );
+    break;
+  case XML:
+    printxml( stream, len - 8 );
     break;
   case JP2C:
     fprintf(fout,"\t\t^Data_Position = %zd <byte offset>\n", offset );
