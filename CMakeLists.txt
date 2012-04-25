@@ -11,6 +11,7 @@ include_directories(
 add_executable(d3tdump d3t_dump.c simpleparser.c)
 add_executable(pirldump pirl_dump.c simpleparser.c)
 add_executable(avdump av_dump.c simpleparser.c)
+add_executable(kdudump kdu_dump.c simpleparser.c)
 
 # http://sf.net/projects/jpeg/files/jpeg2000_images/jpeg2000_images/j2kp4files_v1_5.zip
 FIND_PATH(JPEG2000_CONFORMANCE_DATA_ROOT J2KP4files/testfiles_jp2/file1.jp2
@@ -34,6 +35,7 @@ endif(pirljar)
 # UNIX only sorry
 FIND_PROGRAM(CMP_EXE cmp)
 FIND_PROGRAM(DIFF_EXE diff)
+FIND_PROGRAM(KDU_EXPAND_EXE kdu_expand)
 # JP2 files:
 foreach(jp2file ${testfiles_jp2})
   get_filename_component(jp2name "${jp2file}" NAME_WE)
@@ -66,6 +68,19 @@ foreach(jp2file ${testfiles_jp2})
     ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.d3t)
   add_test( d3tdump_${jp2name}_diff ${DIFF_EXE} -u ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refd3t
     ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.d3t)
+
+  # kakadu
+  add_test( kdudump_${jp2name} kdudump ${jp2file} ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
+  if(KDU_EXPAND_EXE)
+    execute_process(
+      COMMAND ${KDU_EXPAND_EXE} -quiet -i ${jp2file} -o /tmp/kdu_expand.rawl -record ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
+      RESULT_VARIABLE ble
+    )
+  endif()
+  add_test( kdudump_${jp2name}_cmp ${CMP_EXE} ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
+    ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
+  add_test( kdudump_${jp2name}_diff ${DIFF_EXE} -u ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
+    ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
 endforeach(jp2file)
 
 # J2K (P0) stream:
@@ -100,6 +115,19 @@ foreach(jp2file ${codestreams_profile0})
     ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.d3t)
   add_test( d3tdump_${jp2name}_diff ${DIFF_EXE} -u ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refd3t
     ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.d3t)
+
+  # kakadu
+  add_test( kdudump_${jp2name} kdudump ${jp2file} ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
+  if(KDU_EXPAND_EXE)
+    execute_process(
+      COMMAND ${KDU_EXPAND_EXE} -quiet -i ${jp2file} -o /tmp/kdu_expand.rawl -record ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
+      RESULT_VARIABLE ble
+    )
+  endif()
+  add_test( kdudump_${jp2name}_cmp ${CMP_EXE} ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
+    ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
+  add_test( kdudump_${jp2name}_diff ${DIFF_EXE} -u ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
+    ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
 endforeach(jp2file)
 
 # J2K (P1) stream:
@@ -134,4 +162,17 @@ foreach(jp2file ${codestreams_profile1})
     ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.d3t)
   add_test( d3tdump_${jp2name}_diff ${DIFF_EXE} -u ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refd3t
     ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.d3t)
+
+  # kakadu
+  add_test( kdudump_${jp2name} kdudump ${jp2file} ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
+  if(KDU_EXPAND_EXE)
+    execute_process(
+      COMMAND ${KDU_EXPAND_EXE} -quiet -i ${jp2file} -o /tmp/kdu_expand.rawl -record ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
+      RESULT_VARIABLE ble
+    )
+  endif()
+  add_test( kdudump_${jp2name}_cmp ${CMP_EXE} ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
+    ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
+  add_test( kdudump_${jp2name}_diff ${DIFF_EXE} -u ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
+    ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
 endforeach(jp2file)

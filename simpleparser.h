@@ -86,7 +86,7 @@ typedef enum {
   SOP = 0xFF91,
   EPH = 0XFF92,
   SOD = 0xFF93,
-  EOC = 0XFFD9, /* EOI in old jpeg */
+  EOC = 0XFFD9  /* EOI in old jpeg */
 } MarkerType;
 
 /**
