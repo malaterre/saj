@@ -459,7 +459,7 @@ static void printqcd( FILE *stream, size_t len )
   else
     {
     size_t n = len / 2;
-    assert( len * 2 == n );
+    assert( len == n * 2 );
     for( i = 0; i != n; ++i )
       {
       uint16_t val;
@@ -473,12 +473,42 @@ static void printqcd( FILE *stream, size_t len )
     }
 }
 
+static void printeph( FILE *stream, size_t len )
+{
+  int c =0;
+  while( fgetc( stream ) != 0xFF )
+    {
+    ++c;
+    }
+
+  if( c )
+    {
+    fprintf(fout,"\n" );
+    fprintf(fout,"Data : %u bytes\n", c );
+    }
+    data_size += c;
+  int v = fseeko(stream, -1, SEEK_CUR);
+}
+
 static void printsop( FILE *stream, size_t len )
 {
-  assert( len == 4 );
+  assert( len == 2 );
   uint16_t Nsop;
   bool b;
   b = read16(stream, &Nsop); assert( b );
+
+  fprintf(fout,"\n" );
+  fprintf(fout,"  Sequence : %u\n", Nsop );
+  fprintf(fout,"\n" );
+  int c =0;
+  while( fgetc( stream ) != 0xFF )
+    {
+    ++c;
+    }
+
+    data_size += c;
+  fprintf(fout,"Data : %u bytes\n", c );
+  int v = fseeko(stream, -1, SEEK_CUR);
 }
 
 static void printsod( FILE *stream, size_t len )
@@ -1293,6 +1323,9 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
     return false;
   case SIZ:
     printsiz( stream, len );
+    return false;
+  case EPH:
+    printeph( stream, len );
     return false;
   case SOP:
     printsop( stream, len );

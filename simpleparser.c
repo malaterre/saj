@@ -60,6 +60,7 @@ bool hasnolength( uint_fast16_t marker )
   case SOC:
   case SOD:
   case EOC:
+  case EPH:
     return true;
     }
   return false;
