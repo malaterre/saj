@@ -73,7 +73,7 @@ static const dictentry dict[] = {
   { SOC, "SOC", "Start of codestream" },
   { SOT, "SOT", "Start of tile-part" },
   { SOD, "SOD", "Start of data" },
-  { EOC, "EOC", "End of codestream" },
+  { EOC, "EOI", "End of Image (JPEG 2000 EOC End of codestream)" },
   { SIZ, "SIZ", "Image and tile size" },
   { COD, "COD", "Coding style default" },
   { COC, "COC", "Coding style component" },
@@ -193,7 +193,7 @@ static void printcod( FILE *stream, size_t len )
   const char * sTransformation = getDescriptionOfWaveletTransformationString(Transformation);
 
   fprintf(fout, "\tJPEG_COD_Parameters:\n" );
-  fprintf(fout, "\t\tScod = 0x%u\n", Scod );
+  fprintf(fout, "\t\t Scod = 0x%u\n", Scod );
   /* Table A.13 Coding style parameter values for the Scod parameter */
   bool VariablePrecinctSize = (Scod & 0x01) != 0;
   bool SOPMarkerSegments    = (Scod & 0x02) != 0;
@@ -201,13 +201,13 @@ static void printcod( FILE *stream, size_t len )
   fprintf(fout,"\t\t\t Precinct size %s\n", (VariablePrecinctSize ? "defined for each resolution level" : "PPx = 15 and PPy = 15") );
   fprintf(fout,"\t\t\t SOPMarkerSegments = %s used\n", (SOPMarkerSegments    ? "may be"   : "not") );
   fprintf(fout,"\t\t\t EPHPMarkerSegments = %s used\n", (EPHPMarkerSegments   ? "shall be" : "not") );
-  fprintf(fout, "\t\tProgressionOrder = 0x%x (%s progression)\n", ProgressionOrder, sProgressionOrder );
-  fprintf(fout, "\t\tNumberOfLayers = %u\n", NumberOfLayers );
-  fprintf(fout, "\t\tMultipleComponentTransformation = 0x%x (%s)\n", MultipleComponentTransformation, sMultipleComponentTransformation );
-  fprintf(fout, "\t\tNumberOfDecompositionLevels = %u\n", NumberOfDecompositionLevels );
-  fprintf(fout, "\t\tCodeBlockWidth = 0x%x\n", CodeBlockWidth );
-  fprintf(fout, "\t\tCodeBlockHeight = 0x%x\n", CodeBlockHeight );
-  fprintf(fout, "\t\tCodeBlockStyle = 0x%x\n", CodeBlockStyle );
+  fprintf(fout, "\t\t ProgressionOrder = 0x%x (%s progression)\n", ProgressionOrder, sProgressionOrder );
+  fprintf(fout, "\t\t NumberOfLayers = %u\n", NumberOfLayers );
+  fprintf(fout, "\t\t MultipleComponentTransformation = 0x%x (%s)\n", MultipleComponentTransformation, sMultipleComponentTransformation );
+  fprintf(fout, "\t\t NumberOfDecompositionLevels = %u\n", NumberOfDecompositionLevels );
+  fprintf(fout, "\t\t CodeBlockWidth = 0x%x\n", CodeBlockWidth );
+  fprintf(fout, "\t\t CodeBlockHeight = 0x%x\n", CodeBlockHeight );
+  fprintf(fout, "\t\t CodeBlockStyle = 0x%x\n", CodeBlockStyle );
 
   /* Table A.19 - Code-block style for the SPcod and SPcoc parameters */
   bool SelectiveArithmeticCodingBypass                 = (CodeBlockStyle & 0x01) != 0;
@@ -222,7 +222,7 @@ static void printcod( FILE *stream, size_t len )
   fprintf(fout, "\t\t\t %s causal context\n", (VerticallyCausalContext                          ? "Vertically"   : "No vertically"));
   fprintf(fout, "\t\t\t %s termination\n", (PredictableTermination                           ? "Predictable"  : "No predictable"));
   fprintf(fout, "\t\t\t %s symbols are used\n", (SegmentationSymbolsAreUsed                       ? "Segmentation" : "No segmentation"));
-  fprintf(fout, "\t\tWaveletTransformation = 0x%x (%s)\n", Transformation, sTransformation );
+  fprintf(fout, "\t\t WaveletTransformation = 0x%x (%s)\n", Transformation, sTransformation );
   fprintf(fout, "\n" );
 }
 
@@ -256,16 +256,16 @@ static bool print( uint_fast16_t marker, size_t len, FILE *stream )
     }
   const dictentry *d = getdictentryfrommarker( marker );
   assert( offset >= 0 );
-  fprintf(fout, "Offset 0x%04jx Marker 0x%04x %s %s", offset, (unsigned int)marker, d->shortname, d->longname );
+  fprintf(fout, "Offset 0x%04jx Marker 0x%04x %s %s ", offset, (unsigned int)marker, d->shortname, d->longname );
   if( !hasnolength( marker ) )
     {
-    fprintf(fout, " length variable 0x%02zx", len + 2 );
+    fprintf(fout, "length variable 0x%02zx ", len + 2 );
     }
   fprintf(fout,"\n");
   switch( marker )
     {
   case EOC:
-    fprintf(fout, "End of file" );
+    fprintf(fout, "End of file\n" );
     break;
   case COD:
     printcod( stream, len );
