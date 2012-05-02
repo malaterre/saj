@@ -129,4 +129,11 @@ bool isjp2file( const char *filename );
 /* return size of file */
 uintmax_t getfilesize( const char *filename );
 
+/**
+ * return 0, when EOC is at end of file,
+ * return 1, when EOC is one byte before end
+ * ...
+ */
+uintmax_t geteocposition( const char *filename );
+
 #endif

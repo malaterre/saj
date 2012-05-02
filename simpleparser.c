@@ -142,6 +142,10 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t fil
            * Psot. If the Psot is 0, this tile-part is assumed to contain
            * all data until the EOC marker.
            */
+          /*
+           * However this is not as simple as that what if the codestream contains
+           * -say- an extra zero how can we tell that ?
+           */
           off_t offset = ftello(stream);
           assert( file_size >= (uintmax_t)offset + 10 );
           assert( file_size < SIZE_MAX );
@@ -228,13 +232,13 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
 bool parsej2k( const char *filename, PrintFunctionJP2 printfun )
 {
   FILE *stream;
-  uintmax_t file_size;
+  uintmax_t eocpos = geteocposition( filename );
+  uintmax_t file_size = getfilesize( filename );
 
-  file_size = getfilesize( filename );
   stream = fopen( filename, "rb" );
   assert( stream );
 
-  bool b = parsej2k_imp( stream, printfun, file_size );
+  bool b = parsej2k_imp( stream, printfun, file_size - eocpos );
   int v = fclose( stream );
   assert( !v );
 
@@ -253,6 +257,33 @@ bool isjp2file( const char *filename )
   assert( v == 0 );
 
   return b;
+}
+
+uintmax_t geteocposition( const char *filename )
+{
+  FILE *stream = fopen( filename, "rb" );
+  int v = fseeko( stream, -2, SEEK_END );
+  assert( v == 0 );
+
+  const char sig[2] = { 0xFF, 0xd9 };
+  char buf[2];
+  int c = 0;
+  size_t res = fread(buf, sizeof(char), sizeof(buf), stream);
+  assert( res == 2 );
+
+  while( memcmp( buf, sig, 2 ) != 0 )
+    {
+    c++;
+    v = fseeko( stream, -3, SEEK_CUR );
+    assert( v == 0 );
+    res = fread(buf, sizeof(char), sizeof(buf), stream);
+    assert( res == 2 );
+    }
+
+  v = fclose( stream );
+  assert( v == 0 );
+
+  return c;
 }
 
 uintmax_t getfilesize( const char *filename )
