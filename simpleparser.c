@@ -179,7 +179,7 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t fil
 
 bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2K printfun )
 {
-  uintmax_t file_size = file_size = getfilesize( filename );
+  uintmax_t file_size = getfilesize( filename );
   FILE *stream = fopen( filename, "rb" );
 
   uint32_t marker;

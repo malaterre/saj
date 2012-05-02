@@ -213,12 +213,11 @@ static void printqcd( FILE *stream, size_t len )
 
   b = read8(stream, &sqcd); assert( b );
   --len;
-  bool bquant = (sqcd & 0x7f) == 0;
   uint8_t quant = (sqcd & 0x1f);
   uint8_t nbits = (sqcd >> 5);
   fprintf(fout, "\t\t\t\t/*\n");
   fprintf(fout, "\t\t\t\t    Quantization:\n");
-  fprintf(fout, "\t\t\t\t      %s\n", bquant ? "yes" : "None");
+  fprintf(fout, "\t\t\t\t      %s\n", quant ? "yes" : "None");
   fprintf(fout, "\t\t\t\t*/\n");
   fprintf(fout, "\t\t\t\tQuantization_Style = %u\n", quant);
   fprintf(fout, "\t\t\t\tTotal_Guard_Bits = %u\n",nbits);
@@ -236,7 +235,7 @@ static void printqcd( FILE *stream, size_t len )
     fprintf(fout,"%u", sqcd);
     }
 #endif
-  int i;
+  size_t i;
   if( quant == 0x0 )
     {
     size_t n = len;
@@ -300,23 +299,23 @@ static void printcod( FILE *stream, size_t len )
   /* Table A.13 Coding style parameter values for the Scod parameter */
   bool VariablePrecinctSize = (Scod & 0x01) != 0;
   bool SOPMarkerSegments    = (Scod & 0x02) != 0;
-  bool EPHPMarkerSegments   = (Scod & 0x04) != 0;
+  bool EPHMarkerSegments   = (Scod & 0x04) != 0;
 #endif
 
   fprintf(fout, "\t\t\t\t/*\n" );
 #if 0
   fprintf(fout,"\t\t\t Precinct size %s\n", (VariablePrecinctSize ? "defined for each resolution level" : "PPx = 15 and PPy = 15") );
   fprintf(fout,"\t\t\t SOPMarkerSegments = %s used\n", (SOPMarkerSegments    ? "may be"   : "not") );
-  fprintf(fout,"\t\t\t EPHPMarkerSegments = %s used\n", (EPHPMarkerSegments   ? "shall be" : "not") );
+  fprintf(fout,"\t\t\t EPHMarkerSegments = %s used\n", (EPHMarkerSegments   ? "shall be" : "not") );
 #endif
 
   fprintf(fout, "\t\t\t\t    Entropy coder precincts:\n" );
   if( VariablePrecinctSize )
     fprintf(fout, "\t\t\t\t      Precinct size defined in the Precinct_Size parameter.\n" );
   else
-    fprintf(fout, "\t\t\t\t      Precinct size = %u x %u\n", 0 , 0 );
-  fprintf(fout, "\t\t\t\t      No SOP marker segments used\n" );
-  fprintf(fout, "\t\t\t\t      No EPH marker used\n" );
+    fprintf(fout, "\t\t\t\t      Precinct size = %u x %u\n", 1 << 15 , 1 << 15 );
+  fprintf(fout, "\t\t\t\t      %sSOP marker segments used\n", SOPMarkerSegments ? "" : "No " );
+  fprintf(fout, "\t\t\t\t      %sEPH marker used\n", EPHMarkerSegments ? "" : "No " );
   fprintf(fout, "\t\t\t\t*/\n" );
   fprintf(fout, "\t\t\t\tCoding_Style = 16#%u#\n", Scod );
 
@@ -331,11 +330,11 @@ static void printcod( FILE *stream, size_t len )
   fprintf(fout, "\t\t\t\t/*\n" );
   fprintf(fout, "\t\t\t\t    Code-block width exponent offset %u.\n", CodeBlockWidth );
   fprintf(fout, "\t\t\t\t*/\n" );
-  fprintf(fout, "\t\t\t\tCode_Block_Width = %u\n", 1 << CodeBlockWidth+2 );
+  fprintf(fout, "\t\t\t\tCode_Block_Width = %u\n", 1 << (CodeBlockWidth+2) );
   fprintf(fout, "\t\t\t\t/*\n" );
   fprintf(fout, "\t\t\t\t    Code-block height exponent offset %u.\n", CodeBlockHeight );
   fprintf(fout, "\t\t\t\t*/\n" );
-  fprintf(fout, "\t\t\t\tCode_Block_Height = %u\n", 1 << CodeBlockHeight+2 );
+  fprintf(fout, "\t\t\t\tCode_Block_Height = %u\n", 1 << (CodeBlockHeight+2) );
   fprintf(fout, "\t\t\t\t/*\n" );
 
 #if 0
@@ -366,14 +365,13 @@ static void printcod( FILE *stream, size_t len )
 
   if( VariablePrecinctSize )
     {
-    uint8_t N = *p++;
     uint_fast8_t i;
     fprintf(fout, "\t\t\t\t/*\n" );
     fprintf(fout, "\t\t\t\t    Precinct (width, height) by resolution level.\n" );
     fprintf(fout, "\t\t\t\t*/\n" );
-    fprintf(fout, "\t\t\t\tPrecinct_Size = \n", ProgressionOrder, sProgressionOrder );
+    fprintf(fout, "\t\t\t\tPrecinct_Size = %u,%s\n", ProgressionOrder, sProgressionOrder );
     fprintf(fout, "\t\t\t\t\t(\n" );
-    for( i = 0; i < NumberOfDecompositionLevels; ++i )
+    for( i = 0; i <= NumberOfDecompositionLevels; ++i )
       {
       uint8_t val = *p++;
       /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
@@ -439,19 +437,6 @@ static void printsignature( FILE * stream )
   bool b = read32(stream, &s);
   assert( b );
   fprintf(fout,"\t\tSignature = 16#%X#\n", s );
-}
-
-static const char * getbrand( uint_fast32_t br )
-{
-  switch( br )
-    {
-  case JP2:
-      {
-      const dictentry2 *d = getdictentry2frommarker( br );
-      return d->shortname;
-      }
-    }
-  return NULL;
 }
 
 /* I.5.2 File Type box */
@@ -616,7 +601,7 @@ static void printcolourspec( FILE *stream, size_t len )
   len--;
   if( len != 0 )
     {
-  int v = fseeko(stream, (off_t)len, SEEK_CUR);
+    int v = fseeko(stream, (off_t)len, SEEK_CUR);
     }
  
   fprintf(fout,"\t\t\tSpecification_Method = %u\n", meth);
@@ -757,6 +742,7 @@ static void printsot( FILE *stream, size_t len )
   uint8_t  TPsot;
   uint8_t  TNsot;
   bool b;
+  assert( len - 4 == 8 ); // 2 + 4 + 1 + 1
   b = read16(stream, &Isot); assert( b );
   b = read32(stream, &Psot); assert( b );
   b = read8(stream, &TPsot); assert( b );
@@ -909,10 +895,9 @@ static void printcomment( FILE *stream, size_t len )
     }
   else
     {
-    int c = 0;
     for( ; len != 0; --len )
       {
-      int val = fgetc(stream);
+      fgetc(stream);
       //if( c < 100 )
       //fprintf(fout, "%c", val );
       }

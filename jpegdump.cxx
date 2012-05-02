@@ -45,6 +45,8 @@ applicable local, state, national or international regulations.
 #include <cassert>
 #include <cstring>
 
+std::ostream *pout = NULL;
+
 const uint16_t JPEG_MARKER_APP0 = 0xffe0;
 const uint16_t JPEG_MARKER_APP1 = 0xffe1;
 const uint16_t JPEG_MARKER_APP2 = 0xffe2;
@@ -366,7 +368,7 @@ public:
       Xthumbnail=buffer[12];
       Ythumbnail=buffer[13];
 
-      dump(std::cout);
+      dump(*pout);
     }
 
   void dump(std::ostream &out) const
@@ -414,7 +416,7 @@ public:
       SuccessiveApproximationBitPositionHigh               =buffer[1+nComponentsPerScan*2+2] >> 4;
       SuccessiveApproximationBitPositionLowOrPointTransform=buffer[1+nComponentsPerScan*2+2] & 0x0f;
 
-      dump(std::cout);
+      dump(*pout);
     }
 
   ~JPEG_SOS_Parameters()
@@ -474,7 +476,7 @@ public:
         QuantizationTableDestinationSelector[i] = buffer[6+i*3+2];
       }
 
-      dump(std::cout);
+      dump(*pout);
     }
 
   ~JPEG_SOF_Parameters()
@@ -551,7 +553,7 @@ public:
       }
       assert(length == 0);
 
-      dump(std::cout);
+      dump(*pout);
     }
 
   ~JPEG_DHT_Parameters()
@@ -641,7 +643,7 @@ public:
       }
       assert(length == 0);
 
-      dump(std::cout);
+      dump(*pout);
     }
 
   ~JPEG_DQT_Parameters()
@@ -707,7 +709,7 @@ public:
           break;
       }
 
-      dump(std::cout);
+      dump(*pout);
     }
 
   ~JPEG_LSE_Parameters()
@@ -871,7 +873,7 @@ public:
       
       // if (VariablePrecinctSize) { ... } should extract precint size table
 
-      dump(std::cout);
+      dump(*pout);
     }
 
   ~JPEG_COD_Parameters()
@@ -934,7 +936,6 @@ int main(int argc, char *argv[])
   if( argc < 2 ) return 1;
   std::ifstream cin( argv[1], std::ios::binary );
 
-  std::ostream *pout = NULL;
   std::ofstream fileout;
   if( argc > 2 )
     {
@@ -957,7 +958,7 @@ int main(int argc, char *argv[])
   uint16_t markerprefix=read8(cin);
   while (1) {
     if (!cin) {
-      std::cout << "End of file" << std::endl;
+      *pout << "End of file" << std::endl;
       break;
     }
     if (markerprefix != 0xff) {    // byte of entropy-coded segment
@@ -967,13 +968,13 @@ int main(int argc, char *argv[])
     }
     uint16_t marker=read8(cin);
     if (!cin) {
-      std::cout << "End of file immediately after marker flag 0xff ... presumably was padding" << std::endl;
+      *pout << "End of file immediately after marker flag 0xff ... presumably was padding" << std::endl;
       break;
     }
     else if (marker == 0xff) {  // 0xff byte of padding
-      std::cout << "Offset ";
-      writeZeroPaddedHexNumber(std::cout,offset,4);
-      std::cout << " "
+      *pout << "Offset ";
+      writeZeroPaddedHexNumber(*pout,offset,4);
+      *pout << " "
         << "Fill byte 0xfff"
         << std::endl;
       ++offset;
@@ -996,9 +997,9 @@ int main(int argc, char *argv[])
       }
     }
     else if (marker == 0) {    // 0xff byte of entropy-coded segment ... ignore following zero byte
-      std::cout << "Offset ";
-      writeZeroPaddedHexNumber(std::cout,offset,4);
-      std::cout << " "
+      *pout << "Offset ";
+      writeZeroPaddedHexNumber(*pout,offset,4);
+      *pout << " "
         << "Encoded 0xff in entropy-coded segment followed by stuffed zero byte"
         << std::endl;
       markerprefix=read8(cin);
@@ -1010,9 +1011,9 @@ int main(int argc, char *argv[])
       // 0xff byte of JPEG-LS entropy-coded segment ... ignore following zero BIT (not byte)
       // but don't activate this mode until sure we are doing JPEG-LS, else
       // will not pick up JPEG 2000 markers, which don't have high bit set
-      std::cout << "Offset ";
-      writeZeroPaddedHexNumber(std::cout,offset,4);
-      std::cout << " "
+      *pout << "Offset ";
+      writeZeroPaddedHexNumber(*pout,offset,4);
+      *pout << " "
         << "Encoded 0xff in entropy-coded segment followed by stuffed zero bit (JPEG-LS)"
         << std::endl;
       markerprefix=read8(cin);
@@ -1027,28 +1028,28 @@ int main(int argc, char *argv[])
     if (marker == JPEG_MARKER_SOF55) doing_jpegls=true;
     else if (marker == JPEG_MARKER_SOD) doing_jpeg2k_tilepart=true;
 
-    std::cout << "Offset ";
-    writeZeroPaddedHexNumber(std::cout,offset,4);
-    std::cout << " ";
+    *pout << "Offset ";
+    writeZeroPaddedHexNumber(*pout,offset,4);
+    *pout << " ";
     offset+=2;
-    std::cout << "Marker ";
-    writeZeroPaddedHexNumber(std::cout,marker,2);
-    std::cout << " ";
+    *pout << "Marker ";
+    writeZeroPaddedHexNumber(*pout,marker,2);
+    *pout << " ";
     const char *desc;
     const char *abbrev;
     if (dict.getEntry(marker,abbrev,desc)) {
-      std::cout << abbrev << " " << desc << " ";
+      *pout << abbrev << " " << desc << " ";
     }
     if (isVariableLengthJPEGSegment(marker)) {
       uint16_t length=read16(cin);
       if (cin) {
         offset+=2;
-        std::cout << "length variable ";
-        writeZeroPaddedHexNumber(std::cout,length,2);
-        std::cout << " ";
+        *pout << "length variable ";
+        writeZeroPaddedHexNumber(*pout,length,2);
+        *pout << " ";
       }
       else {
-        std::cout << "Error - variable length marker without length" << std::endl;
+        *pout << "Error - variable length marker without length" << std::endl;
         return 1;
       }
 
@@ -1058,7 +1059,7 @@ int main(int argc, char *argv[])
         unsigned char *buffer=new unsigned char[length-2];
         cin.read((char *)buffer,length-2);
         if (!cin || cin.gcount() != length-2) {
-          std::cout << "Error - couldn't read variable length parameter sequence" << std::endl;
+          *pout << "Error - couldn't read variable length parameter sequence" << std::endl;
           return 1;
         }
         else {
@@ -1110,9 +1111,9 @@ int main(int argc, char *argv[])
             else {
               assert(0);
             }
-            std::cout << std::endl << "\tJPEG_DRI_Parameters - Define Restart Interval = ";
-            writeZeroPaddedHexNumber(std::cout,restartinterval,4);
-            std::cout << std::endl;
+            *pout << std::endl << "\tJPEG_DRI_Parameters - Define Restart Interval = ";
+            writeZeroPaddedHexNumber(*pout,restartinterval,4);
+            *pout << std::endl;
             break;
           case JPEG_MARKER_DNL:
             unsigned long numberoflines;
@@ -1133,9 +1134,9 @@ int main(int argc, char *argv[])
             else {
               assert(0);
             }
-            std::cout << std::endl << "\tJPEG_DNL_Parameters - Define Number of Lines = ";
-            writeZeroPaddedHexNumber(std::cout,numberoflines,4);
-            std::cout << std::endl;
+            *pout << std::endl << "\tJPEG_DNL_Parameters - Define Number of Lines = ";
+            writeZeroPaddedHexNumber(*pout,numberoflines,4);
+            *pout << std::endl;
             break;
           case JPEG_MARKER_COD:
             (void)new JPEG_COD_Parameters(buffer,length-2);
@@ -1149,7 +1150,7 @@ int main(int argc, char *argv[])
         }
       }
       else {
-        std::cout << "Warning - variable length marker without \"zero\" length (really 2)";
+        *pout << "Warning - variable length marker without \"zero\" length (really 2)";
       }
       offset+=(length-2);
     }
@@ -1163,12 +1164,12 @@ int main(int argc, char *argv[])
         cin.read((char *)&value,1);
         if (cin) {
           offset+=1;
-          std::cout << "length fixed 3 value ";
-          writeZeroPaddedHexNumber(std::cout,(uint16_t)value,2);
-          std::cout << " ";
+          *pout << "length fixed 3 value ";
+          writeZeroPaddedHexNumber(*pout,(uint16_t)value,2);
+          *pout << " ";
         }
         else {
-          std::cout << "Error - fixed length 3 marker without value" << std::endl;
+          *pout << "Error - fixed length 3 marker without value" << std::endl;
           return 1;
         }
       }
@@ -1177,12 +1178,12 @@ int main(int argc, char *argv[])
         uint16_t value=read16(cin);
         if (cin) {
           offset+=2;
-          std::cout << "length fixed 3 value ";
-          writeZeroPaddedHexNumber(std::cout,value,2);
-          std::cout << " ";
+          *pout << "length fixed 3 value ";
+          writeZeroPaddedHexNumber(*pout,value,2);
+          *pout << " ";
         }
         else {
-          std::cout << "Error - fixed length 4 marker without value" << std::endl;
+          *pout << "Error - fixed length 4 marker without value" << std::endl;
           return 1;
         }
       }
@@ -1192,7 +1193,7 @@ int main(int argc, char *argv[])
         break;
       }
     }
-    std::cout << std::endl;
+    *pout << std::endl;
     markerprefix=read8(cin);
   }
 

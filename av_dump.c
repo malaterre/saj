@@ -238,17 +238,19 @@ uintmax_t file_size;
 static void printeoc( FILE *stream, size_t len )
 {
   fprintf(fout,"\n");
-
-  off_t offset = ftello(stream);
 #if 0
+  off_t offset = ftello(stream);
   assert( offset + len == file_size ); /* file8.jp2 */
+#else
+  (void)stream;
+  (void)len;
 #endif
-  fprintf(fout, "Size: %u bytes\n", file_size );
-  fprintf(fout, "Data Size: %u bytes\n", data_size );
+  fprintf(fout, "Size: %zu bytes\n", file_size );
+  fprintf(fout, "Data Size: %zu bytes\n", data_size );
   assert( file_size >= data_size );
   uintmax_t overhead = file_size - data_size;
   const int ratio = 100 * overhead / file_size;
-  fprintf(fout, "Overhead: %u bytes (%u%)\n", overhead , ratio );
+  fprintf(fout, "Overhead: %zu bytes (%u%%)\n", overhead , ratio );
 }
 
 static uint16_t csiz;
@@ -304,7 +306,7 @@ static void printpoc( FILE *stream, size_t len )
     {
     number_progression_order_change = ( len )/ 9;
     }
-  assert( number_progression_order_change == 2 );
+  assert( number_progression_order_change == 2 || number_progression_order_change == 1 );
   for( ; i < number_progression_order_change; ++i )
     {
     uint8_t rspoc = *p++;
@@ -315,11 +317,11 @@ static void printpoc( FILE *stream, size_t len )
       }
     else
       {
-      cread16(p, &cspoc);
+      cread16((char*)p, &cspoc);
       p += 2;
       }
     uint16_t lyepoc;
-    cread16(p, &lyepoc);
+    cread16((char*)p, &lyepoc);
     p += 2;
     uint8_t repoc = *p++;
     uint16_t cepoc;
@@ -329,7 +331,7 @@ static void printpoc( FILE *stream, size_t len )
       }
     else
       {
-      cread16(p, &cepoc);
+      cread16((char*)p, &cepoc);
       p += 2;
       }
     uint8_t ppoc = *p++;
@@ -475,7 +477,8 @@ static void printqcd( FILE *stream, size_t len )
 
 static void printeph( FILE *stream, size_t len )
 {
-  int c =0;
+  int c = 0;
+  assert( len == 2 );
   while( fgetc( stream ) != 0xFF )
     {
     ++c;
@@ -487,7 +490,7 @@ static void printeph( FILE *stream, size_t len )
     fprintf(fout,"Data : %u bytes\n", c );
     }
     data_size += c;
-  int v = fseeko(stream, -1, SEEK_CUR);
+  (void)fseeko(stream, -1, SEEK_CUR);
 }
 
 static void printsop( FILE *stream, size_t len )
@@ -508,16 +511,16 @@ static void printsop( FILE *stream, size_t len )
 
     data_size += c;
   fprintf(fout,"Data : %u bytes\n", c );
-  int v = fseeko(stream, -1, SEEK_CUR);
+  (void)fseeko(stream, -1, SEEK_CUR);
 }
 
 static void printsod( FILE *stream, size_t len )
 {
-  int v = fseeko(stream, (off_t)len, SEEK_CUR);
+  (void)fseeko(stream, (off_t)len, SEEK_CUR);
   if( len )
     {
     fprintf(fout,"\n" );
-    fprintf(fout,"Data : %u bytes\n", len );
+    fprintf(fout,"Data : %zu bytes\n", len );
     data_size += len;
     }
 }
@@ -529,6 +532,7 @@ static void printsot( FILE *stream, size_t len )
   uint8_t  TPsot;
   uint8_t  TNsot;
   bool b;
+  assert( len == 8 ); // 2 + 4 + 1 + 1
   b = read16(stream, &Isot); assert( b );
   b = read32(stream, &Psot); assert( b );
   b = read8(stream, &TPsot); assert( b );
@@ -561,7 +565,7 @@ static void printcomment( FILE *stream, size_t len )
     }
   else
     {
-    int v = fseeko(stream, (off_t)len, SEEK_CUR);
+    (void)fseeko(stream, (off_t)len, SEEK_CUR);
     fprintf(fout,"  Comment      : ...\n");
     }
 
@@ -588,7 +592,6 @@ static void printtlm( FILE *stream, size_t len )
 	size_t header_size = len - 2;
 
 	int tot_num_tp = header_size / quotient;
-	int tot_num_tp_remaining = header_size % quotient;
 
   int i;
   for (i = 0; i < tot_num_tp; ++i)
@@ -599,13 +602,13 @@ static void printtlm( FILE *stream, size_t len )
       }
     else if( ST == 1 )
       {
-      uint8_t v = *p++;
+      uint8_t v = *p;
       fprintf(fout, "  Tile index #%-3d: %u\n", i, v );
       }
     else if( ST == 2 )
       {
       uint16_t v;
-      cread16(p, &v);
+      cread16((char*)p, &v);
       fprintf(fout, "  Tile index #%-2d: %u\n", i, v );
       }
     else
@@ -616,13 +619,13 @@ static void printtlm( FILE *stream, size_t len )
     if( Ptlm_size == 2 )
       {
       uint16_t v;
-      cread16(p, &v);
+      cread16((char*)p, &v);
       fprintf(fout, "  Length #%-7d: %u\n",i, v );
       }
     if( Ptlm_size == 4 )
       {
       uint32_t v;
-      cread32(p, &v);
+      cread32((char*)p, &v);
       fprintf(fout, "  Length #%-6d: %u\n",i, v );
       }
     else
@@ -651,7 +654,7 @@ static void printcoc( FILE *stream, size_t len )
     }
   else
     {
-    cread16(p, &ccoc);
+    cread16((char*)p, &ccoc);
     p += 2;
     }
   uint8_t Scoc = *p++;
@@ -751,7 +754,7 @@ static void printcod( FILE *stream, size_t len )
   /* Table A.13 Coding style parameter values for the Scod parameter */
   bool VariablePrecinctSize = (Scod & 0x01) != 0;
   bool SOPMarkerSegments    = (Scod & 0x02) != 0;
-  bool EPHPMarkerSegments   = (Scod & 0x04) != 0;
+  bool EPHMarkerSegments   = (Scod & 0x04) != 0;
 
   /* Table A.19 - Code-block style for the SPcod and SPcoc parameters */
   bool SelectiveArithmeticCodingBypass                 = (CodeBlockStyle & 0x01) != 0;
@@ -764,7 +767,7 @@ static void printcod( FILE *stream, size_t len )
 
   print_with_indent(indentlevel, "  Default Precincts of 2^15x2^15     : %s\n" , VariablePrecinctSize ? "no" : "yes" );
   print_with_indent(indentlevel, "  SOP Marker Segments                : %s\n" , SOPMarkerSegments ? "yes" : "no" );
-  print_with_indent(indentlevel, "  EPH Marker Segments                : %s\n" , EPHPMarkerSegments ? "yes" : "no" );
+  print_with_indent(indentlevel, "  EPH Marker Segments                : %s\n" , EPHMarkerSegments ? "yes" : "no" );
   print_with_indent(indentlevel, "  All Flags                          : %08u\n", Scod );
   print_with_indent(indentlevel, "  Progression Order                  : %s\n", sProgressionOrder );
   print_with_indent(indentlevel, "  Layers                             : %u\n", NumberOfLayers );
@@ -807,30 +810,6 @@ static void printsignature( FILE * stream )
   fprintf(fout,"  Corrupted: %s\n", s == sig ? "no" : "yes" );
 }
 
-static void printstring( const char *in, const char *ref )
-{
-  assert( in );
-  assert( ref );
-  size_t len = strlen( ref );
-  fprintf(fout,"%s", in);
-  if( len < 4 )
-    {
-    int l;
-    fprintf(fout,"\"");
-    fprintf(fout,"%s", ref);
-    for( l = 0; l < 4 - (int)len; ++l )
-      {
-      fprintf(fout," ");
-      }
-    fprintf(fout,"\"");
-    }
-  else
-    {
-    fprintf(fout,"%s", ref);
-    }
-    fprintf(fout,"\n");
-}
-
 static const char * getbrand( const char br[] )
 {
   const char ref[] = "jp2\040";
@@ -867,7 +846,6 @@ static void printfiletype( FILE * stream, size_t len )
   char br[4+1];
   br[4] = 0;
   uint32_t minv;
-  uint32_t cl;
   bool b= true;
   fread(br,4,1,stream); assert( b );
   b = read32(stream, &minv); assert( b );
@@ -998,7 +976,7 @@ static void printpclr( FILE *stream, size_t len )
     }
   for( i = 0; i < NE; ++i )
     {
-      fprintf(fout,"  Entry #%03u: ", i );
+    fprintf(fout,"  Entry #%03u: ", (unsigned)i );
     for( j = 0; j < NPC; ++j )
       {
       b = read8(stream, &Cij); assert( b );
@@ -1099,9 +1077,7 @@ static void printcolourspec( FILE *stream, size_t len )
     {
     fprintf(fout,"  ICC Colour Profile:" );
     assert( len != 0 );
-    //int v = fseeko(stream, (off_t)len, SEEK_CUR);
-//    for( ; len != 0; --len )
-    int i;
+    size_t i;
     for( i = 0; i < len; ++i )
       {
       int val = fgetc(stream);
@@ -1109,8 +1085,7 @@ static void printcolourspec( FILE *stream, size_t len )
       fprintf(fout, "%02x ", val );
       }
     }
-      fprintf (fout, "\n" );
-
+  fprintf (fout, "\n" );
 }
 
 /* I.5.3 JP2 Header box (superbox) */
@@ -1127,7 +1102,6 @@ static void printheaderbox( FILE * stream , size_t fulllen )
     b = read32(stream, &marker);
     assert( b );
 
-    off_t offset = ftello(stream);
     const dictentry2 *d = getdictentry2frommarker( marker );
     fprintf(fout, "\n" );
     fprintf(fout, "  Sub box: \"%s\" (%s)\n", d->shortname, d->longname );
@@ -1156,7 +1130,6 @@ static void printheaderbox( FILE * stream , size_t fulllen )
 
 static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
 {
-  off_t offset = ftello(stream);
   const dictentry2 *d = getdictentry2frommarker( marker );
   (void)len;
   fprintf(fout, "\n" );
@@ -1271,11 +1244,11 @@ static void printsiz( FILE *stream, size_t len )
     b = read8(stream, &xrsiz); assert( b );
     b = read8(stream, &yrsiz); assert( b );
     char buffer[50];
-    sprintf( buffer, "Component #%u %s", i, t7 );
+    sprintf( buffer, "Component #%u %s", (unsigned)i, t7 );
     print_with_indent(indentlevel, "  %-33s: %u\n"   , buffer, (ssiz & 0x7f) + 1 );
-    sprintf( buffer, "Component #%u %s", i, t8 );
+    sprintf( buffer, "Component #%u %s", (unsigned)i, t8 );
     print_with_indent(indentlevel, "  %-33s: %s\n"   , buffer, sign ? "yes" : "no" );
-    sprintf( buffer, "Component #%u %s", i, t9 );
+    sprintf( buffer, "Component #%u %s", (unsigned)i, t9 );
     print_with_indent(indentlevel, "  %-33s: %ux%u\n", buffer, xrsiz, yrsiz );
     }
 }
@@ -1302,7 +1275,8 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
   assert( offset >= 0 );
   assert( d->shortname );
   fprintf(fout, "\n" );
-  print_with_indent( indentlevel, "%-8u: New marker: %s (%s)", offset - rel_offset, d->shortname, d->longname );
+  print_with_indent( indentlevel, "%-8u: New marker: %s (%s)",
+    offset - rel_offset, d->shortname, d->longname );
   fprintf(fout,"\n");
   switch( marker )
     {
