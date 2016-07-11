@@ -70,6 +70,7 @@ static const dictentry2 * getdictentry2frommarker( uint_fast32_t marker )
 }
 
 static const dictentry dict[] = {
+  { FF30, "FF30", "Reserved" },
   { SOC, "SOC", "Start of codestream" },
   { SOT, "SOT", "Start of tile-part" },
   { SOD, "SOD", "Start of data" },
@@ -197,10 +198,10 @@ static void printcod( FILE *stream, size_t len )
   /* Table A.13 Coding style parameter values for the Scod parameter */
   bool VariablePrecinctSize = (Scod & 0x01) != 0;
   bool SOPMarkerSegments    = (Scod & 0x02) != 0;
-  bool EPHPMarkerSegments   = (Scod & 0x04) != 0;
+  bool EPHMarkerSegments   = (Scod & 0x04) != 0;
   fprintf(fout,"\t\t\t Precinct size %s\n", (VariablePrecinctSize ? "defined for each resolution level" : "PPx = 15 and PPy = 15") );
   fprintf(fout,"\t\t\t SOPMarkerSegments = %s used\n", (SOPMarkerSegments    ? "may be"   : "not") );
-  fprintf(fout,"\t\t\t EPHPMarkerSegments = %s used\n", (EPHPMarkerSegments   ? "shall be" : "not") );
+  fprintf(fout,"\t\t\t EPHMarkerSegments = %s used\n", (EPHMarkerSegments   ? "shall be" : "not") );
   fprintf(fout, "\t\t ProgressionOrder = 0x%x (%s progression)\n", ProgressionOrder, sProgressionOrder );
   fprintf(fout, "\t\t NumberOfLayers = %u\n", NumberOfLayers );
   fprintf(fout, "\t\t MultipleComponentTransformation = 0x%x (%s)\n", MultipleComponentTransformation, sMultipleComponentTransformation );

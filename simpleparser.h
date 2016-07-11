@@ -72,21 +72,21 @@ typedef enum {
   COD = 0xFF52,
   COC = 0xFF53,
   TLM = 0xFF55,
-  PLM = 0XFF57,
-  PLT = 0XFF58,
+  PLM = 0xFF57,
+  PLT = 0xFF58,
   QCD = 0xFF5C,
   QCC = 0xFF5D,
   RGN = 0xFF5E,
   POC = 0xFF5F,
-  PPM = 0XFF60,
-  PPT = 0XFF61,
+  PPM = 0xFF60,
+  PPT = 0xFF61,
   CRG = 0xFF63,
   COM = 0xFF64,
   SOT = 0xFF90,
   SOP = 0xFF91,
-  EPH = 0XFF92,
+  EPH = 0xFF92,
   SOD = 0xFF93,
-  EOC = 0XFFD9  /* EOI in old jpeg */
+  EOC = 0xFFD9  /* EOI in old jpeg */
 } MarkerType;
 
 /**

@@ -478,7 +478,7 @@ static void printqcd( FILE *stream, size_t len )
 static void printeph( FILE *stream, size_t len )
 {
   int c = 0;
-  assert( len == 2 );
+  //assert( len == 2 );
   while( fgetc( stream ) != 0xFF )
     {
     ++c;
@@ -503,15 +503,20 @@ static void printsop( FILE *stream, size_t len )
   fprintf(fout,"\n" );
   fprintf(fout,"  Sequence : %u\n", Nsop );
   fprintf(fout,"\n" );
-  int c =0;
-  while( fgetc( stream ) != 0xFF )
+  int c = 0;
+  int k;
+  char buf[64];
+  while( (k = fgetc( stream )) != 0xFF )
     {
+    buf[c] = k;
     ++c;
     }
 
-    data_size += c;
+  data_size += c;
   fprintf(fout,"Data : %u bytes\n", c );
   (void)fseeko(stream, -1, SEEK_CUR);
+  buf[c] = 0;
+  assert( 0 );
 }
 
 static void printsod( FILE *stream, size_t len )

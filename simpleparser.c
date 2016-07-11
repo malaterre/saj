@@ -93,7 +93,7 @@ typedef struct
   uint32_t Psot; /* 32   0, or 14 to (2^32 - 1) */
   uint8_t TPsot; /*  8   0 to 254 */
   uint8_t TNsot; /*  8   Table A.6 */
-}  __attribute__((packed)) sot;
+} __attribute__((packed)) sot;
 
 static uint32_t readsot( const char *a, size_t l )
 {
@@ -107,6 +107,28 @@ static uint32_t readsot( const char *a, size_t l )
   return s.Psot;
 }
 
+typedef struct
+{
+  uint8_t Scod;
+  uint8_t ProgressionOrder;
+  uint16_t NumberOfLayers;
+  uint8_t MultipleComponentTransformation;
+  uint8_t CodeBlockWidth;
+  uint8_t CodeBlockHeight;
+  uint8_t CodeBlockStyle;
+  uint8_t Transformation;
+} __attribute__((packed)) cod;
+
+static uint8_t readcod( const char *a, size_t l )
+{
+  cod s;
+  const size_t ref = sizeof( s );
+  assert( l == ref );
+  memcpy( &s, a, sizeof(s) );
+  s.NumberOfLayers = bswap_16(s.NumberOfLayers);
+  return s.Scod;
+}
+
 /* Take as input an open FILE* stream
  * it will not close it.
  */
@@ -116,6 +138,7 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t fil
   uint32_t sotlen = 1;
   size_t lenmarker;
   const off_t start = ftello( stream );
+  bool EPHMarkerSegments;
   while( ftello( stream ) < start + file_size && read16(stream, &marker) )
     {
     assert( marker ); /* debug */
@@ -126,10 +149,27 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t fil
       int r = read16( stream, &l );
       assert( r );
       assert( l >= 2 );
-      lenmarker = (size_t)l - 2;
+      lenmarker = (size_t)l;
+      lenmarker -= 2;
 
       /* special book keeping */
-      if( marker == SOT )
+      if( marker == COD )
+        {
+        int v;
+        char b[9];
+        size_t lr = fread( b, sizeof(char), sizeof(b), stream);
+        assert( lr == 9 );
+        v = fseeko( stream, -9, SEEK_CUR );
+        assert( v == 0 );
+
+        uint8_t scod = readcod( b, sizeof(b) );
+        EPHMarkerSegments = (scod & 0x04) != 0;
+        }
+      else if( marker == SOP )
+        {
+        //lenmarker += 10 - 4;
+        }
+      else if( marker == SOT )
         {
         int v;
         char b[8];
@@ -157,8 +197,12 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t fil
         }
       else
         {
-        /* remove size of -say- qcd item for our book keeping */
-        sotlen -= (lenmarker+4);
+        const uint8_t head = marker >> 8;
+        if( head == 0xFF )
+          {
+          /* remove size of -say- qcd item for our book keeping */
+          sotlen -= (lenmarker+4);
+          }
         }
       }
     else
@@ -167,8 +211,15 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t fil
       /* marker has no lenght but we know how much to skip */
       if( marker == SOD )
         {
-        assert( sotlen >= 14 );
-        lenmarker = sotlen - 14;
+        if( EPHMarkerSegments )
+          {
+          lenmarker = 0;
+          }
+        else
+          {
+          assert( sotlen >= 14 );
+          lenmarker = sotlen - 14;
+          }
         }
       }
     if( printfun( marker, lenmarker, stream ) )
