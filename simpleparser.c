@@ -87,13 +87,22 @@ static bool read32(FILE *input, uint32_t * ret)
   return true;
 }
 
+static bool read64(FILE *input, uint64_t * ret)
+{
+  union { uint64_t v; char bytes[8]; } u;
+  size_t l = fread(u.bytes,sizeof(char),8,input);
+  if( l != 8 || feof(input) ) return false;
+  *ret = bswap_64(u.v);
+  return true;
+}
+
 typedef struct
 {
   uint16_t Isot; /* 16   0 to 65534 */
   uint32_t Psot; /* 32   0, or 14 to (2^32 - 1) */
   uint8_t TPsot; /*  8   0 to 254 */
   uint8_t TNsot; /*  8   Table A.6 */
-} __attribute__((packed)) sot;
+}  __attribute__((packed)) sot;
 
 static uint32_t readsot( const char *a, size_t l )
 {
@@ -107,69 +116,31 @@ static uint32_t readsot( const char *a, size_t l )
   return s.Psot;
 }
 
-typedef struct
-{
-  uint8_t Scod;
-  uint8_t ProgressionOrder;
-  uint16_t NumberOfLayers;
-  uint8_t MultipleComponentTransformation;
-  uint8_t CodeBlockWidth;
-  uint8_t CodeBlockHeight;
-  uint8_t CodeBlockStyle;
-  uint8_t Transformation;
-} __attribute__((packed)) cod;
-
-static uint8_t readcod( const char *a, size_t l )
-{
-  cod s;
-  const size_t ref = sizeof( s );
-  assert( l == ref );
-  memcpy( &s, a, sizeof(s) );
-  s.NumberOfLayers = bswap_16(s.NumberOfLayers);
-  return s.Scod;
-}
-
 /* Take as input an open FILE* stream
  * it will not close it.
  */
-static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t file_size )
+static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, const uintmax_t file_size )
 {
   uint16_t marker;
-  uint32_t sotlen = 1;
+  uintmax_t sotlen = 0;
   size_t lenmarker;
   const off_t start = ftello( stream );
-  bool EPHMarkerSegments;
-  while( ftello( stream ) < start + file_size && read16(stream, &marker) )
+  while( ftello( stream ) < (off_t)(start + file_size) && read16(stream, &marker) )
     {
+    bool b;
     assert( marker ); /* debug */
-    bool b = hasnolength( marker );
+    b = hasnolength( marker );
     if ( !b )
       {
       uint16_t l;
       int r = read16( stream, &l );
+      if( !r ) return false;
       assert( r );
       assert( l >= 2 );
-      lenmarker = (size_t)l;
-      lenmarker -= 2;
+      lenmarker = (size_t)l - 2;
 
       /* special book keeping */
-      if( marker == COD )
-        {
-        int v;
-        char b[9];
-        size_t lr = fread( b, sizeof(char), sizeof(b), stream);
-        assert( lr == 9 );
-        v = fseeko( stream, -9, SEEK_CUR );
-        assert( v == 0 );
-
-        uint8_t scod = readcod( b, sizeof(b) );
-        EPHMarkerSegments = (scod & 0x04) != 0;
-        }
-      else if( marker == SOP )
-        {
-        //lenmarker += 10 - 4;
-        }
-      else if( marker == SOT )
+      if( marker == SOT )
         {
         int v;
         char b[8];
@@ -187,22 +158,20 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t fil
            * -say- an extra zero how can we tell that ?
            */
           off_t offset = ftello(stream);
+          assert( offset < SIZE_MAX );
           assert( file_size >= (uintmax_t)offset + 10 );
           assert( file_size < SIZE_MAX );
-          assert( file_size < UINT32_MAX );
-          sotlen = (uint32_t)(file_size - (uintmax_t)offset + 10);
+          sotlen = file_size - (uintmax_t)offset + 10;
+          //fprintf( stderr, "sotlen was computed to: %d\n",  sotlen );
           }
         v = fseeko( stream, -8, SEEK_CUR );
         assert( v == 0 );
         }
-      else
+      else if( sotlen )
         {
-        const uint8_t head = marker >> 8;
-        if( head == 0xFF )
-          {
-          /* remove size of -say- qcd item for our book keeping */
-          sotlen -= (lenmarker+4);
-          }
+        assert( sotlen > 4 );
+        /* remove size of -say- qcd item for our book keeping */
+        sotlen -= (lenmarker+4);
         }
       }
     else
@@ -211,15 +180,9 @@ static bool parsej2k_imp( FILE *stream, PrintFunctionJ2K printfun, uintmax_t fil
       /* marker has no lenght but we know how much to skip */
       if( marker == SOD )
         {
-        if( EPHMarkerSegments )
-          {
-          lenmarker = 0;
-          }
-        else
-          {
-          assert( sotlen >= 14 );
-          lenmarker = sotlen - 14;
-          }
+        assert( sotlen >= 14 );
+        assert( sotlen < SIZE_MAX );
+        lenmarker = sotlen - 14;
         }
       }
     if( printfun( marker, lenmarker, stream ) )
@@ -238,43 +201,63 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
   FILE *stream = fopen( filename, "rb" );
 
   uint32_t marker;
-  uint32_t len;
+  uint64_t len64; /* ref */
+  uint32_t len32; /* local 32bits op */
   assert( stream );
-  while( read32(stream, &len) )
+  while( read32(stream, &len32) )
     {
     bool b = read32(stream, &marker);
     assert( b );
+    len64 = len32;
+    if( len32 == 1 ) /* 64bits ? */
+      {
+      bool b = read64(stream, &len64);
+      assert( b );
+      len64 -= 8;
+      }
     if( marker == JP2C )
       {
       const off_t start = ftello(stream);
-      if( !len )
+      if( !len64 )
         {
-        len = (uint32_t)(file_size - (uintmax_t)start + 8);
+        len64 = (uint64_t)(file_size - (uintmax_t)start + 8);
         }
-      assert( len >= 8 );
-      if( printfun2( marker, len, stream ) )
+      assert( len64 >= 8 );
+      if( printfun2( marker, len64, stream ) )
         {
-        assert( len - 8 < file_size ); /* jpeg codestream cant be longer than jp2 file */
-        bool bb = parsej2k_imp( stream, printfun, len - 8 /*file_size*/ );
+        bool bb;
+        assert( len64 - 8 < file_size ); /* jpeg codestream cant be longer than jp2 file */
+        bb = parsej2k_imp( stream, printfun, len64 - 8 /*file_size*/ );
+        if( !bb )
+          {
+          fprintf( stderr, "*** unexpected end of codestream\n" );
+          return false;
+          }
         assert ( bb );
         }
-      const off_t end = ftello(stream);
-      assert( end - start == len - 8 );
+      /*const off_t end = ftello(stream);*/
+      assert( ftello(stream) - start == (off_t)(len64 - 8) );
       /* done with JP2C move on to remaining (trailing) stuff */
       continue;
       }
 
-    assert( len >= 8 );
-    if( printfun2( marker, len, stream ) )
+    assert( len64 >= 8 );
+    if( !(len64 - 8 < file_size) ) /* jpeg codestream cant be longer than jp2 file */
       {
-      const size_t lenmarker = len - 8;
+      return false;
+      }
+    if( printfun2( marker, len64, stream ) )
+      {
+      const size_t lenmarker = len64 - 8;
       int v = fseeko(stream, (off_t)lenmarker, SEEK_CUR);
       assert( v == 0 );
       }
     }
   assert( feof(stream) );
+{
   int v = fclose( stream );
   assert( !v );
+}
 
   return true;
 }
@@ -282,6 +265,7 @@ bool parsejp2( const char *filename, PrintFunctionJP2 printfun2, PrintFunctionJ2
 
 bool parsej2k( const char *filename, PrintFunctionJP2 printfun )
 {
+  bool b;
   FILE *stream;
   uintmax_t eocpos = geteocposition( filename );
   uintmax_t file_size = getfilesize( filename );
@@ -289,9 +273,11 @@ bool parsej2k( const char *filename, PrintFunctionJP2 printfun )
   stream = fopen( filename, "rb" );
   assert( stream );
 
-  bool b = parsej2k_imp( stream, printfun, file_size - eocpos );
+  b = parsej2k_imp( stream, printfun, file_size - eocpos );
+{
   int v = fclose( stream );
   assert( !v );
+}
 
   return b;
 }
@@ -312,14 +298,15 @@ bool isjp2file( const char *filename )
 
 uintmax_t geteocposition( const char *filename )
 {
+  size_t res;
+  int c = 0;
+  char buf[2];
+  static const char sig[2] = { (char)0xFF, (char)0xd9 };
   FILE *stream = fopen( filename, "rb" );
   int v = fseeko( stream, -2, SEEK_END );
   assert( v == 0 );
 
-  const char sig[2] = { 0xFF, 0xd9 };
-  char buf[2];
-  int c = 0;
-  size_t res = fread(buf, sizeof(char), sizeof(buf), stream);
+  res = fread(buf, sizeof(*buf), sizeof(buf), stream);
   assert( res == 2 );
 
   while( memcmp( buf, sig, 2 ) != 0 )

@@ -46,10 +46,28 @@ typedef enum {
   PCLR = 0x70636c72,
   RES  = 0x72657320,
   /* JPIP */
-  IPTR = 0x69707472
+  IPTR = 0x69707472,
+  /* MJ2 */
+  MDAT = 0x6d646174,
+  MOOV = 0x6d6f6f76,
+  /* ? */
+  ASOC = 0x61736f63,
+  CIDX = 0x63696478,
+  FIDX = 0x66696478,
+  JPCH = 0x6a706368,
+  JPLH = 0x6a706c68,
+  LBL  = 0x6c626c20,
+  RESC = 0x72657363,
+  RESD = 0x72657364,
+  RREQ = 0x72726571,
+  UINF = 0x75696e66,
+  ULST = 0x756c7374,
+  URL  = 0x75726c20,
+  UUID = 0x75756964
 } OtherType;
 
-/* Table A.2 List of markers and marker segments */
+/* Part 1  Table A.2 List of markers and marker segments */
+/* Part 10 Table A.1 – List of JP3D markers and marker segments */
 typedef enum {
   FF30 = 0xFF30,
   FF31 = 0xFF31,
@@ -68,25 +86,34 @@ typedef enum {
   FF3E = 0xFF3E,
   FF3F = 0xFF3F,
   SOC = 0xFF4F,
+  CAP = 0xFF50, /* ? */
   SIZ = 0xFF51,
   COD = 0xFF52,
   COC = 0xFF53,
+  NSI = 0xFF54, /* T.801 | ISO/IEC 15444-2 */
   TLM = 0xFF55,
-  PLM = 0xFF57,
-  PLT = 0xFF58,
+  PLM = 0XFF57,
+  PLT = 0XFF58,
   QCD = 0xFF5C,
   QCC = 0xFF5D,
   RGN = 0xFF5E,
   POC = 0xFF5F,
-  PPM = 0xFF60,
-  PPT = 0xFF61,
+  PPM = 0XFF60,
+  PPT = 0XFF61,
   CRG = 0xFF63,
   COM = 0xFF64,
+  DCO = 0xFF70, /* T.801 | ISO/IEC 15444-2 */
+  MCT = 0xFF74, /* T.801 | ISO/IEC 15444-2 */
+  MCC = 0xFF75, /* T.801 | ISO/IEC 15444-2 */
+  NLT = 0xFF76, /* T.801 | ISO/IEC 15444-2 */
+  MCO = 0xFF77, /* T.801 | ISO/IEC 15444-2 */
+  CBD = 0xFF78, /* T.801 | ISO/IEC 15444-2 */
+  ATK = 0xFF79, /* T.801 | ISO/IEC 15444-2 */
   SOT = 0xFF90,
   SOP = 0xFF91,
-  EPH = 0xFF92,
+  EPH = 0XFF92,
   SOD = 0xFF93,
-  EOC = 0xFFD9  /* EOI in old jpeg */
+  EOC = 0XFFD9  /* EOI in old jpeg */
 } MarkerType;
 
 /**

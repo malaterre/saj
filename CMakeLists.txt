@@ -1,17 +1,37 @@
 cmake_minimum_required(VERSION 2.8)
-project(SAJ)
+project(FAP)
 
-# ref tools (dicom3tools package)
+find_package(OpenJPEG)
+if(OPJ_FOUND)
+include_directories( ${OPENJPEG_INCLUDE_DIRS} BEFORE)
+add_executable(plane plane.cxx)
+target_link_libraries(plane openjpeg)
+add_executable(plane2 plane2.cxx)
+target_link_libraries(plane2 openjpeg)
+
+add_executable(testempty1 testempty1.c)
+add_executable(testempty2 testempty2.c)
+target_link_libraries(testempty1 openjpeg)
+target_link_libraries(testempty2 openjpeg)
+endif(OPJ_FOUND)
+
 add_executable(jpegdump jpegdump.cxx)
+add_executable(jp2dump jp2dump.cxx)
+add_executable(dump dump.cxx)
+add_executable(dump2 dump2.cxx)
 
 # SAJ applications:
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
-  )
+)
 add_executable(d3tdump d3t_dump.c simpleparser.c)
 add_executable(pirldump pirl_dump.c simpleparser.c)
 add_executable(avdump av_dump.c simpleparser.c)
+if(UNIX)
+target_link_libraries(avdump m)
+endif()
 add_executable(kdudump kdu_dump.c simpleparser.c)
+add_executable(copytile copy_tile.c simpleparser.c)
 
 # http://sf.net/projects/jpeg/files/jpeg2000_images/jpeg2000_images/j2kp4files_v1_5.zip
 FIND_PATH(JPEG2000_CONFORMANCE_DATA_ROOT J2KP4files/testfiles_jp2/file1.jp2
@@ -233,3 +253,25 @@ foreach(jp2file ${nonregression_jp2})
   add_test( kdudump_${jp2name}_diff ${DIFF_EXE} -u ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.refkdu
     ${CMAKE_CURRENT_BINARY_DIR}/${jp2name}.kdu)
 endforeach(jp2file)
+#
+#add_library(libCore STATIC internal.c)
+#add_library(libA SHARED a.c)
+#target_link_libraries(libA LINK_PRIVATE libCore)
+#add_library(libB SHARED b.c)
+#target_link_libraries(libB LINK_PUBLIC libA LINK_PRIVATE libCore)
+#install(TARGETS libA libB
+#  EXPORT my
+#  RUNTIME DESTINATION bin
+#  LIBRARY DESTINATION lib
+#)
+# install(EXPORT my DESTINATION blu)
+#
+#set_target_properties(libA PROPERTIES
+#  FRAMEWORK TRUE
+#  FRAMEWORK_VERSION 2.0
+#  PRIVATE_HEADER "internal.h"
+#  PUBLIC_HEADER "a.h;b.h"
+#  #RESOURCE "test.lua"
+#  #INSTALL_NAME_DIR "@executable_path/../../../Library/Frameworks"
+#  DEBUG_POSTFIX -d
+#)

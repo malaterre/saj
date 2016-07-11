@@ -38,13 +38,14 @@
 #include <inttypes.h>
 #include <byteswap.h>
 #include <string.h>
+#include <math.h>
 
 #include <simpleparser.h>
 
 FILE * fout;
 static int indentlevel = 0;
 
-void print_with_indent(int indent, const char * format, ...)
+static void print_with_indent(int indent, const char * format, ...)
 {
   va_list arg;
   va_start(arg, format);
@@ -62,6 +63,13 @@ static bool read8(FILE *input, uint8_t * ret)
   if( l != 1 || feof(input) ) return false;
   *ret = u.v;
   return true;
+}
+
+static void cread8(const char *input, uint8_t * ret)
+{
+  union { uint8_t v; char bytes[1]; } u;
+  memcpy(u.bytes,input,1);
+  *ret = u.v;
 }
 
 static void cread16(const char *input, uint16_t * ret)
@@ -119,6 +127,21 @@ static const dictentry2 dict2[] = {
   { PCLR, "pclr", "Palette box" },
   { IHDR, "ihdr", "Image Header box" },
   { COLR, "colr", "Colour Specification box" },
+  { RREQ, "rreq", "Reader Requirements Box" },
+  { RES , "res ", "Resolution box" },
+  { UUID, "uuid", "UUID box" },
+  { ASOC, "asoc", "Association box" },
+  { LBL , "lbl ", "Label box" },
+  { RESC, "resc", "Capture Resolution box" },
+  { UINF, "uinf", "UUID Info box" },
+  { ULST, "ulst", "UUID List box" },
+  { URL , "url ", "Data Entry URL box" },
+  { JPCH, "jpch", "Codestream Header box" },
+  { JPLH, "jplh", "Compositing Header box" },
+  { IPTR, "iptr", "Data Entry URL box" },
+  { CIDX, "cidx", "Data Entry URL box" },
+  { FIDX, "fidx", "Data Entry URL box" },
+  { RESD, "resd", "Default Display Resolution box" },
 
   { 0, 0, 0 }
 };
@@ -133,6 +156,7 @@ static const dictentry2 * getdictentry2frommarker( uint_fast32_t marker )
     {
     if( p->marker == marker ) return p;
     }
+  assert( 0 );
   assert( end->marker == 0 );
   return end;
 }
@@ -152,13 +176,19 @@ static const dictentry dict[] = {
   { POC,  "POC",  "Progression order change" },
   { TLM,  "TLM",  "Tile-part length" },
   { PLM,  "PLM",  "Packed length, main header" },
-  { PLT,  "PLT",  "Packed length, tile-part header" },
+  { PLT,  "PLT",  "Packet length, tile-part header" },
   { PPM,  "PPM",  "Packed packet headers, main header" },
   { PPT,  "PPT",  "Packed packet headers, tile-part header" },
   { SOP,  "SOP",  "Start of packet" },
   { EPH,  "EPH",  "End of packet header" },
   { CRG,  "CRG",  "Component registration" },
   { COM,  "COM",  "Comment" },
+  { CAP,  "CAP",  "Capabilities" },
+  { NSI,  "NSI",  "Additional dimension image and tile size" },
+  { MCC,  "MCC",  "MCC" },
+  { MCT,  "MCT",  "MCT" },
+  { MCO,  "MCO",  "Multiple component transform ordering" },
+  { CBD,  "CBD",  "Component bit depth definition" },
 
   { 0, 0, 0 }
 };
@@ -232,8 +262,8 @@ static const char *getDescriptionOfWaveletTransformationString(uint8_t waveletTr
   return descriptionOfWaveletTransformation;
 }
 
-uintmax_t data_size;
-uintmax_t file_size;
+static uintmax_t data_size;
+static uintmax_t file_size;
 
 static void printeoc( FILE *stream, size_t len )
 {
@@ -245,12 +275,13 @@ static void printeoc( FILE *stream, size_t len )
   (void)stream;
   (void)len;
 #endif
-  fprintf(fout, "Size: %zu bytes\n", file_size );
-  fprintf(fout, "Data Size: %zu bytes\n", data_size );
+  print_with_indent(indentlevel, "Size: %zu bytes\n", file_size );
+  print_with_indent(indentlevel, "Data Size: %zu bytes\n", data_size );
   assert( file_size >= data_size );
   uintmax_t overhead = file_size - data_size;
   const int ratio = 100 * overhead / file_size;
-  fprintf(fout, "Overhead: %zu bytes (%u%%)\n", overhead , ratio );
+  print_with_indent(indentlevel, "Overhead: %zu bytes (%u%%)\n", overhead , ratio );
+  fprintf(fout,"\n");
 }
 
 static uint16_t csiz;
@@ -388,9 +419,9 @@ static void printqcc( FILE *stream, size_t len )
     break;
     }
 
-  print_with_indent(indentlevel, "  Index             : %u\n", cqcc );
-  print_with_indent(indentlevel, "  Quantization Type : %s\n", s );
-  print_with_indent(indentlevel, "  Guard Bits        : %u\n", nbits );
+  print_with_indent(indentlevel, "Index             : %u\n", cqcc );
+  print_with_indent(indentlevel, "Quantization Type : %s\n", s );
+  print_with_indent(indentlevel, "Guard Bits        : %u\n", nbits );
 
   if( quant == 0x0 )
     {
@@ -400,7 +431,10 @@ static void printqcc( FILE *stream, size_t len )
       uint8_t val;
       b = read8(stream, &val); assert( b );
       const uint8_t exp = val >> 3;
-      print_with_indent(indentlevel, "  Exponent #%-8u: %u\n", i, exp );
+      print_with_indent(indentlevel, "Exponent #%-8u: %u\n", i, exp );
+      const double mantissa = 1.0;
+      const double d = mantissa * pow( 2.0, -exp );
+      print_with_indent(indentlevel, "Delta    #%-8u: %g\n", i, d );
       }
     }
   else
@@ -413,10 +447,14 @@ static void printqcc( FILE *stream, size_t len )
       const uint16_t mant = val & 0x7ff;
       const uint16_t exp = val >> 11;
 
-      print_with_indent(indentlevel, "  Mantissa #%-8u: %u\n", i, mant );
-      print_with_indent(indentlevel, "  Exponent #%-8u: %u\n", i, exp );
+      print_with_indent(indentlevel, "Mantissa #%-8u: %u\n", i, mant );
+      print_with_indent(indentlevel, "Exponent #%-8u: %u\n", i, exp );
+      const double mantissa = 1.0 + ((mant & 0x7ff) / 2048.0);
+      const double d = mantissa * pow( 2.0, -exp );
+      print_with_indent(indentlevel, "Delta    #%-8u: %g\n", i, d );
       }
     }
+  fprintf(fout,"\n");
 
 }
 
@@ -444,8 +482,8 @@ static void printqcd( FILE *stream, size_t len )
     s = "scalar expounded";
     break;
     }
-  print_with_indent(indentlevel, "  Quantization Type : %s\n", s );
-  print_with_indent(indentlevel, "  Guard Bits        : %u\n", nbits );
+  print_with_indent(indentlevel, "Quantization Type : %s\n", s );
+  print_with_indent(indentlevel, "Guard Bits        : %u\n", nbits );
 
   if( quant == 0x0 )
     {
@@ -455,7 +493,9 @@ static void printqcd( FILE *stream, size_t len )
       uint8_t val;
       b = read8(stream, &val); assert( b );
       const uint8_t exp = val >> 3;
-      print_with_indent(indentlevel, "  Exponent #%-8u: %u\n", i, exp );
+      print_with_indent(indentlevel, "Exponent #%-8u: %u\n", i, exp );
+      const double d = 1.0 * pow( 2.0, -exp );
+      print_with_indent(indentlevel, "Delta    #%-8u: %f\n", i, d );
       }
     }
   else
@@ -469,19 +509,38 @@ static void printqcd( FILE *stream, size_t len )
       const uint16_t mant = val & 0x7ff;
       const uint16_t exp = val >> 11;
 
-      print_with_indent(indentlevel, "  Mantissa #%-8u: %u\n", i, mant );
-      print_with_indent(indentlevel, "  Exponent #%-8u: %u\n", i, exp );
+      print_with_indent(indentlevel, "Mantissa #%-8u: %u\n", i, mant );
+      print_with_indent(indentlevel, "Exponent #%-8u: %u\n", i, exp );
+      const double mantissa = 1.0 + ((mant & 0x7ff) / 2048.0);
+      const double d = mantissa * pow( 2.0, -exp );
+      print_with_indent(indentlevel, "Delta    #%-8u: %g\n", i, d );
       }
     }
+  fprintf(fout,"\n");
 }
 
 static void printeph( FILE *stream, size_t len )
 {
   int c = 0;
-  //assert( len == 2 );
-  while( fgetc( stream ) != 0xFF )
+//  assert( len == 2 );
+  assert( !ferror(stream) );
+  bool cond = true;
+  while( !feof( stream ) && cond )
     {
     ++c;
+    cond = fgetc( stream ) != 0xFF;
+    if( !cond )
+      {
+      int v = fgetc( stream );
+      assert( v != 0xFF );
+      assert( !feof( stream ) );
+      uint16_t marker = 0xff00 | v;
+      if( marker == 0xff23 || marker == 0xff7f )
+        {
+        cond = true;
+        }
+      //fprintf( stderr, "%x %x\n", ftello( stream ), v );
+      }
     }
 
   if( c )
@@ -489,8 +548,8 @@ static void printeph( FILE *stream, size_t len )
     fprintf(fout,"\n" );
     fprintf(fout,"Data : %u bytes\n", c );
     }
-    data_size += c;
-  (void)fseeko(stream, -1, SEEK_CUR);
+  data_size += c;
+  (void)fseeko(stream, -2, SEEK_CUR);
 }
 
 static void printsop( FILE *stream, size_t len )
@@ -503,20 +562,15 @@ static void printsop( FILE *stream, size_t len )
   fprintf(fout,"\n" );
   fprintf(fout,"  Sequence : %u\n", Nsop );
   fprintf(fout,"\n" );
-  int c = 0;
-  int k;
-  char buf[64];
-  while( (k = fgetc( stream )) != 0xFF )
+  int c =0;
+  while( fgetc( stream ) != 0xFF )
     {
-    buf[c] = k;
     ++c;
     }
 
-  data_size += c;
+    data_size += c;
   fprintf(fout,"Data : %u bytes\n", c );
   (void)fseeko(stream, -1, SEEK_CUR);
-  buf[c] = 0;
-  assert( 0 );
 }
 
 static void printsod( FILE *stream, size_t len )
@@ -525,9 +579,10 @@ static void printsod( FILE *stream, size_t len )
   if( len )
     {
     fprintf(fout,"\n" );
-    fprintf(fout,"Data : %zu bytes\n", len );
+    print_with_indent(indentlevel,"Data : %zu bytes\n", len );
     data_size += len;
     }
+  fprintf(fout,"\n" );
 }
 
 static void printsot( FILE *stream, size_t len )
@@ -543,13 +598,14 @@ static void printsot( FILE *stream, size_t len )
   b = read8(stream, &TPsot); assert( b );
   b = read8(stream, &TNsot); assert( b );
   fprintf(fout,"\n" );
-  fprintf(fout,"  Tile        : %u\n", Isot );
-  fprintf(fout,"  Length      : %u\n", Psot );
-  fprintf(fout,"  Index       : %u\n", TPsot );
+  fprintf(fout,"    Tile       : %u\n", Isot );
+  fprintf(fout,"    Length     : %u\n", Psot );
+  fprintf(fout,"    Index      : %u\n", TPsot );
   if( TNsot )
-    fprintf(fout,"  Tile-Parts: : %u\n", TNsot );
+    fprintf(fout,"    Tile-Parts : %u\n", TNsot );
   else
-    fprintf(fout,"  Tile-Parts: : unknown\n" );
+    fprintf(fout,"    Tile-Parts : unknown\n" );
+  fprintf(fout,"\n" );
 }
 
 static void printcomment( FILE *stream, size_t len )
@@ -559,21 +615,90 @@ static void printcomment( FILE *stream, size_t len )
   b = read16(stream, &rcom); assert( b );
   len -= 2;
   fprintf(fout,"\n" );
-  fprintf(fout,"  Registration : %s\n", rcom ? "ISO-8859-15" : "binary" );
+  fprintf(fout,"    Registration : %s\n", rcom ? "ISO-8859-15" : "binary" );
   if( len < 512 )
     {
     char buffer[512];
     size_t l = fread(buffer,sizeof(char),len,stream);
     buffer[len] = 0;
     assert( l == len );
-    fprintf(fout,"  Comment      : %s\n", buffer );
+    fprintf(fout,"    Comment      : %s\n", buffer );
     }
   else
     {
     (void)fseeko(stream, (off_t)len, SEEK_CUR);
-    fprintf(fout,"  Comment      : ...\n");
+    fprintf(fout,"    Comment      : ...\n");
     }
+  fprintf(fout,"\n" );
 
+}
+
+// Table A-37 - Packet length, tile-part headers parameter values
+static void printplt( FILE *stream, size_t len )
+{
+  uint8_t Zplt;
+  bool b;
+  b = read8(stream, &Zplt); assert( b );
+  len -= 1;
+  fprintf(fout,"\n" );
+  fprintf(fout,"    Index Zplt       : %d\n", Zplt );
+  fprintf(fout,"    Marker size Lplt : %d bytes\n", len + 3 );
+  int number_packets = 0;
+  size_t sum = 0;
+  while( len )
+    {
+    size_t packet_length = 0; // technically cannot go beyond 32bits
+    int partial = 1;
+    while (partial)
+      {
+      uint8_t Iplt;
+      b = read8(stream, &Iplt);
+      len--;
+      assert( b );
+      partial = Iplt >> 7;
+      const uint8_t packet_length_partial = Iplt & 127;
+      packet_length = (packet_length << 7) | packet_length_partial;
+      }
+    sum += packet_length;
+    //fprintf(fout,"%d,", v );
+    }
+  fprintf(fout,"sum: %d,", sum );
+  fprintf(fout,"\n" );
+
+//  assert( 0 );
+}
+
+// p1_03.j2k
+// g1_colr.j2c
+// g3_colr.j2c corrupted PPM ?
+static void printppm( FILE *stream, size_t len )
+{
+  // Table F.5 – Pointer marker segments
+  bool b;
+  uint8_t Zppm;
+  b = read8(stream, &Zppm); assert( b );
+  len -= 1;
+  fprintf(fout, "\n" );
+  print_with_indent(indentlevel, "Index Zppm    : %u\n", Zppm);
+  do
+    {
+    uint32_t Nppm;
+    b = read32(stream, &Nppm); assert(b);
+    len -= 4;
+    if( len < Nppm )
+      {
+      print_with_indent(indentlevel, "Corrupted Marker Length Lppm Skipping: %u\n", Nppm);
+      (void)fseeko(stream, (off_t)len, SEEK_CUR);
+      return;
+      }
+    assert( len >= Nppm );
+    (void)fseeko(stream, (off_t)Nppm, SEEK_CUR);
+    len -= Nppm;
+    print_with_indent(indentlevel, "Marker Length Lppm : %u\n", Nppm);
+    }
+  while( len != 0 );
+  assert( len == 0 );
+  fprintf(fout, "\n" );
 }
 
 static void printtlm( FILE *stream, size_t len )
@@ -587,7 +712,7 @@ static void printtlm( FILE *stream, size_t len )
   const uint8_t *p = (const uint8_t*)buffer;
   const uint8_t *end = p + len;
   uint8_t Ztlm = *p++;
-  fprintf(fout, "  Index          : %u\n", Ztlm );
+  print_with_indent(indentlevel, "Index         : %u\n", Ztlm );
   uint8_t Stlm = *p++;
   uint8_t ST = ( Stlm >> 4 ) & 0x3;
   uint8_t SP = ( Stlm >> 6 ) & 0x1;
@@ -603,18 +728,18 @@ static void printtlm( FILE *stream, size_t len )
     {
     if( ST == 0 )
       {
-      fprintf(fout, "  Tile index #%-3d: in order\n", i );
+      print_with_indent(indentlevel, "Tile index #%-3d: in order\n", i );
       }
     else if( ST == 1 )
       {
       uint8_t v = *p;
-      fprintf(fout, "  Tile index #%-3d: %u\n", i, v );
+      print_with_indent(indentlevel, "Tile index #%-3d: %u\n", i, v );
       }
     else if( ST == 2 )
       {
       uint16_t v;
       cread16((char*)p, &v);
-      fprintf(fout, "  Tile index #%-2d: %u\n", i, v );
+      print_with_indent(indentlevel, "Tile index #%-2d: %u\n", i, v );
       }
     else
       {
@@ -625,13 +750,13 @@ static void printtlm( FILE *stream, size_t len )
       {
       uint16_t v;
       cread16((char*)p, &v);
-      fprintf(fout, "  Length #%-7d: %u\n",i, v );
+      print_with_indent(indentlevel, "Length #%-7d: %u\n",i, v );
       }
     if( Ptlm_size == 4 )
       {
       uint32_t v;
       cread32((char*)p, &v);
-      fprintf(fout, "  Length #%-6d: %u\n",i, v );
+      print_with_indent(indentlevel, "Length #%-6d: %u\n",i, v );
       }
     else
       {
@@ -640,6 +765,7 @@ static void printtlm( FILE *stream, size_t len )
     p += Ptlm_size;
     }
   assert( p == end );
+  fprintf(fout, "\n" );
 }
 
 
@@ -688,6 +814,7 @@ static void printcoc( FILE *stream, size_t len )
     //assert( !NumberOfDecompositionLevels );
   assert( p == end );
 #endif
+  bool SelectiveArithmeticCodingBypass                 = (CodeBlockStyle & 0x01) != 0;
   bool ResetContextProbabilitiesOnCodingPassBoundaries = (CodeBlockStyle & 0x02) != 0;
   bool TerminationOnEachCodingPass                     = (CodeBlockStyle & 0x04) != 0;
   bool VerticallyCausalContext                         = (CodeBlockStyle & 0x08) != 0;
@@ -696,17 +823,17 @@ static void printcoc( FILE *stream, size_t len )
   const char * sTransformation = getDescriptionOfWaveletTransformationString(Transformation);
 
   fprintf(fout, "\n");
-  fprintf(fout, "  Component                          : %u\n", ccoc);
-  fprintf(fout, "  Precincts                          : %s\n", Scoc == 0x0 ? "default" : "custom" );
-  fprintf(fout, "  Decomposition Levels               : %u\n", NumberOfDecompositionLevels);
-  fprintf(fout, "  Code-block size                    : %ux%u\n", 1 << xcb, 1 << ycb);
-  fprintf(fout, "  Selective Arithmetic Coding Bypass : %s\n", Scoc ? "yes" : "no" );
-  fprintf(fout, "  Reset Context Probabilities        : %s\n", ResetContextProbabilitiesOnCodingPassBoundaries ? "yes" : "no" );
-  fprintf(fout, "  Termination on Each Coding Pass    : %s\n", TerminationOnEachCodingPass ? "yes" : "no" );
-  fprintf(fout, "  Vertically Causal Context          : %s\n", VerticallyCausalContext ? "yes" : "no" );
-  fprintf(fout, "  Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
-  fprintf(fout, "  Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
-  fprintf(fout, "  Wavelet Transformation             : %s\n", sTransformation );
+  print_with_indent(indentlevel, "Component                          : %u\n", ccoc);
+  print_with_indent(indentlevel, "Precincts                          : %s\n", Scoc == 0x0 ? "default" : "custom" );
+  print_with_indent(indentlevel, "Decomposition Levels               : %u\n", NumberOfDecompositionLevels);
+  print_with_indent(indentlevel, "Code-block size                    : %ux%u\n", 1 << xcb, 1 << ycb);
+  print_with_indent(indentlevel, "Selective Arithmetic Coding Bypass : %s\n", SelectiveArithmeticCodingBypass ? "yes" : "no" );
+  print_with_indent(indentlevel, "Reset Context Probabilities        : %s\n", ResetContextProbabilitiesOnCodingPassBoundaries ? "yes" : "no" );
+  print_with_indent(indentlevel, "Termination on Each Coding Pass    : %s\n", TerminationOnEachCodingPass ? "yes" : "no" );
+  print_with_indent(indentlevel, "Vertically Causal Context          : %s\n", VerticallyCausalContext ? "yes" : "no" );
+  print_with_indent(indentlevel, "Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
+  print_with_indent(indentlevel, "Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
+  print_with_indent(indentlevel, "Wavelet Transformation             : %s\n", sTransformation );
 
   if( Scoc )
     {
@@ -718,11 +845,14 @@ static void printcoc( FILE *stream, size_t len )
       /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
       uint8_t width = val & 0x0f;
       uint8_t height = val >> 4;
-      print_with_indent(indentlevel, "  Precinct #%u Size Exponents         : %ux%u\n", i, width, height );
+      print_with_indent(indentlevel, "Precinct #%u Size Exponents         : %ux%u\n", i, width, height );
       }
     }
   assert( p == end );
+  fprintf(fout, "\n");
 }
+
+static bool cap = false;
 
 static void printcod( FILE *stream, size_t len )
 {
@@ -743,61 +873,219 @@ static void printcod( FILE *stream, size_t len )
   u16.bytes[1] = (char)*p++;
   uint16_t NumberOfLayers = bswap_16( u16.v );
   uint8_t MultipleComponentTransformation = *p++;
-  uint8_t NumberOfDecompositionLevels = *p++;
-  uint8_t CodeBlockWidth = *p++ & 0xf;
-  uint8_t CodeBlockHeight = *p++ & 0xf;
-  uint8_t xcb = CodeBlockWidth + 2;
-  uint8_t ycb = CodeBlockHeight + 2;
-  assert( xcb + ycb <= 12 );
-  uint8_t CodeBlockStyle = *p++;
-  uint8_t Transformation = *p++;
 
   const char * sMultipleComponentTransformation = getMultipleComponentTransformationString(MultipleComponentTransformation);
   const char * sProgressionOrder = getDescriptionOfProgressionOrderString(ProgressionOrder);
-  const char * sTransformation = getDescriptionOfWaveletTransformationString(Transformation);
 
   /* Table A.13 Coding style parameter values for the Scod parameter */
   bool VariablePrecinctSize = (Scod & 0x01) != 0;
   bool SOPMarkerSegments    = (Scod & 0x02) != 0;
   bool EPHMarkerSegments   = (Scod & 0x04) != 0;
 
-  /* Table A.19 - Code-block style for the SPcod and SPcoc parameters */
-  bool SelectiveArithmeticCodingBypass                 = (CodeBlockStyle & 0x01) != 0;
-  bool ResetContextProbabilitiesOnCodingPassBoundaries = (CodeBlockStyle & 0x02) != 0;
-  bool TerminationOnEachCodingPass                     = (CodeBlockStyle & 0x04) != 0;
-  bool VerticallyCausalContext                         = (CodeBlockStyle & 0x08) != 0;
-  bool PredictableTermination                          = (CodeBlockStyle & 0x10) != 0;
-  bool SegmentationSymbolsAreUsed                      = (CodeBlockStyle & 0x20) != 0;
-  fprintf(fout, "\n" );
-
-  print_with_indent(indentlevel, "  Default Precincts of 2^15x2^15     : %s\n" , VariablePrecinctSize ? "no" : "yes" );
-  print_with_indent(indentlevel, "  SOP Marker Segments                : %s\n" , SOPMarkerSegments ? "yes" : "no" );
-  print_with_indent(indentlevel, "  EPH Marker Segments                : %s\n" , EPHMarkerSegments ? "yes" : "no" );
-  print_with_indent(indentlevel, "  All Flags                          : %08u\n", Scod );
-  print_with_indent(indentlevel, "  Progression Order                  : %s\n", sProgressionOrder );
-  print_with_indent(indentlevel, "  Layers                             : %u\n", NumberOfLayers );
-  print_with_indent(indentlevel, "  Multiple Component Transformation  : %s\n", sMultipleComponentTransformation );
-  print_with_indent(indentlevel, "  Decomposition Levels               : %u\n", NumberOfDecompositionLevels );
-  print_with_indent(indentlevel, "  Code-block size                    : %ux%u\n", 1 << xcb, 1 << ycb );
-  print_with_indent(indentlevel, "  Selective Arithmetic Coding Bypass : %s\n", SelectiveArithmeticCodingBypass ? "yes" : "no" );
-  print_with_indent(indentlevel, "  Reset Context Probabilities        : %s\n", ResetContextProbabilitiesOnCodingPassBoundaries ? "yes" : "no" );
-  print_with_indent(indentlevel, "  Termination on Each Coding Pass    : %s\n", TerminationOnEachCodingPass ? "yes" : "no" );
-  print_with_indent(indentlevel, "  Vertically Causal Context          : %s\n", VerticallyCausalContext ? "yes" : "no" );
-  print_with_indent(indentlevel, "  Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
-  print_with_indent(indentlevel, "  Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
-  print_with_indent(indentlevel, "  Wavelet Transformation             : %s\n", sTransformation );
-
-  if( VariablePrecinctSize )
+  if( !cap )
     {
-    //uint8_t N = *p++;
-    uint_fast8_t i;
-    for( i = 0; i <= NumberOfDecompositionLevels; ++i )
+    uint8_t NumberOfDecompositionLevels = *p++;
+    uint8_t CodeBlockWidth = *p++ & 0xf;
+    uint8_t CodeBlockHeight = *p++ & 0xf;
+    uint8_t xcb = CodeBlockWidth + 2;
+    uint8_t ycb = CodeBlockHeight + 2;
+    assert( xcb + ycb <= 12 );
+    uint8_t CodeBlockStyle = *p++;
+    uint8_t Transformation = *p++;
+    const char * sTransformation = getDescriptionOfWaveletTransformationString(Transformation);
+
+    /* Table A.19 - Code-block style for the SPcod and SPcoc parameters */
+    bool SelectiveArithmeticCodingBypass                 = (CodeBlockStyle & 0x01) != 0;
+    bool ResetContextProbabilitiesOnCodingPassBoundaries = (CodeBlockStyle & 0x02) != 0;
+    bool TerminationOnEachCodingPass                     = (CodeBlockStyle & 0x04) != 0;
+    bool VerticallyCausalContext                         = (CodeBlockStyle & 0x08) != 0;
+    bool PredictableTermination                          = (CodeBlockStyle & 0x10) != 0;
+    bool SegmentationSymbolsAreUsed                      = (CodeBlockStyle & 0x20) != 0;
+
+
+    fprintf(fout, "\n" );
+
+    print_with_indent(indentlevel, "Default Precincts of 2^15x2^15     : %s\n" , VariablePrecinctSize ? "no" : "yes" );
+    print_with_indent(indentlevel, "SOP Marker Segments                : %s\n" , SOPMarkerSegments ? "yes" : "no" );
+    print_with_indent(indentlevel, "EPH Marker Segments                : %s\n" , EPHMarkerSegments ? "yes" : "no" );
+    print_with_indent(indentlevel, "Codeblock X offset                 : 0\n" );
+    print_with_indent(indentlevel, "Codeblock Y offset                 : 0\n" );
+    print_with_indent(indentlevel, "All Flags                          : %08u\n", Scod );
+    print_with_indent(indentlevel, "Progression Order                  : %s\n", sProgressionOrder );
+    print_with_indent(indentlevel, "Layers                             : %u\n", NumberOfLayers );
+    print_with_indent(indentlevel, "Multiple Component Transformation  : %s\n", sMultipleComponentTransformation );
+    print_with_indent(indentlevel, "Decomposition Levels               : %u\n", NumberOfDecompositionLevels );
+    print_with_indent(indentlevel, "Code-block size                    : %ux%u\n", 1 << xcb, 1 << ycb );
+    print_with_indent(indentlevel, "Selective Arithmetic Coding Bypass : %s\n", SelectiveArithmeticCodingBypass ? "yes" : "no" );
+    print_with_indent(indentlevel, "Reset Context Probabilities        : %s\n", ResetContextProbabilitiesOnCodingPassBoundaries ? "yes" : "no" );
+    print_with_indent(indentlevel, "Termination on Each Coding Pass    : %s\n", TerminationOnEachCodingPass ? "yes" : "no" );
+    print_with_indent(indentlevel, "Vertically Causal Context          : %s\n", VerticallyCausalContext ? "yes" : "no" );
+    print_with_indent(indentlevel, "Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
+    print_with_indent(indentlevel, "Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
+    print_with_indent(indentlevel, "Wavelet Transformation             : %s\n", sTransformation );
+
+    if( VariablePrecinctSize )
       {
-      uint8_t val = *p++;
-      /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
-      uint8_t width = val & 0x0f;
-      uint8_t height = val >> 4;
-      print_with_indent(indentlevel, "  Precinct #%u Size Exponents         : %ux%u\n", i, width, height );
+      //uint8_t N = *p++;
+      uint_fast8_t i;
+      for( i = 0; i <= NumberOfDecompositionLevels; ++i )
+        {
+        uint8_t val = *p++;
+        /* Table A.21 - Precinct width and height for the SPcod and SPcoc parameters */
+        uint8_t width = val & 0x0f;
+        uint8_t height = val >> 4;
+        print_with_indent(indentlevel, "Precinct #%u Size Exponents         : %ux%u\n", i, width, height );
+        }
+      }
+    }
+  else
+    {
+    uint8_t NumberOfDecompositionLevelsXaxis = *p++;
+    uint8_t NumberOfDecompositionLevelsYaxis = *p++;
+    uint8_t NumberOfDecompositionLevelsZaxis = *p++;
+    uint8_t CodeBlockWidth  = *p++ & 0xf;
+    uint8_t CodeBlockHeight = *p++ & 0xf;
+    uint8_t CodeBlockDepth  = *p++ & 0xf;
+    uint8_t xcb = CodeBlockWidth + 0;
+    uint8_t ycb = CodeBlockHeight + 0;
+    uint8_t zcb = CodeBlockDepth + 0;
+    uint8_t CodeBlockStyle = *p++;
+    uint8_t TransformationKernelXaxis = *p++;
+    uint8_t TransformationKernelYaxis = *p++;
+    uint8_t TransformationKernelZaxis = *p++;
+    assert( xcb + ycb + zcb <= 18 );
+    assert( xcb + ycb + zcb >= 4 );
+
+    /* Table A.8 - 3D Code-block style for the SPcod and SPcoc parameters, extended */
+    bool SelectiveArithmeticCodingBypass                 = (CodeBlockStyle & 0x01) != 0;
+    bool ResetContextProbabilitiesOnCodingPassBoundaries = (CodeBlockStyle & 0x02) != 0;
+    bool TerminationOnEachCodingPass                     = (CodeBlockStyle & 0x04) != 0;
+    bool CausalContext                                   = (CodeBlockStyle & 0x08) != 0;
+    bool PredictableTermination                          = (CodeBlockStyle & 0x10) != 0;
+    bool SegmentationSymbolsAreUsed                      = (CodeBlockStyle & 0x20) != 0;
+
+    const char * sTransformationX = getDescriptionOfWaveletTransformationString(TransformationKernelXaxis);
+    const char * sTransformationY = getDescriptionOfWaveletTransformationString(TransformationKernelYaxis);
+    const char * sTransformationZ = getDescriptionOfWaveletTransformationString(TransformationKernelZaxis);
+
+    fprintf(fout, "\n" );
+
+    print_with_indent(indentlevel, "Default Precincts of 2^15x2^15     : %s\n" , VariablePrecinctSize ? "no" : "yes" );
+    print_with_indent(indentlevel, "SOP Marker Segments                : %s\n" , SOPMarkerSegments ? "yes" : "no" );
+    print_with_indent(indentlevel, "EPH Marker Segments                : %s\n" , EPHMarkerSegments ? "yes" : "no" );
+    print_with_indent(indentlevel, "All Flags                          : %08u\n", Scod );
+    print_with_indent(indentlevel, "Progression Order                  : %s\n", sProgressionOrder );
+    print_with_indent(indentlevel, "Layers                             : %u\n", NumberOfLayers );
+    print_with_indent(indentlevel, "Multiple Component Transformation  : %s\n", sMultipleComponentTransformation );
+    print_with_indent(indentlevel, "Decomposition Levels X Axis        : %u\n", NumberOfDecompositionLevelsXaxis );
+    print_with_indent(indentlevel, "Decomposition Levels Y Axis        : %u\n", NumberOfDecompositionLevelsYaxis );
+    print_with_indent(indentlevel, "Decomposition Levels Z Axis        : %u\n", NumberOfDecompositionLevelsZaxis );
+    print_with_indent(indentlevel, "Code-block size                    : %ux%ux%u\n", 1 << xcb, 1 << ycb, 1 << zcb );
+    print_with_indent(indentlevel, "Selective Arithmetic Coding Bypass : %s\n", SelectiveArithmeticCodingBypass ? "yes" : "no" );
+    print_with_indent(indentlevel, "Reset Context Probabilities        : %s\n", ResetContextProbabilitiesOnCodingPassBoundaries ? "yes" : "no" );
+    print_with_indent(indentlevel, "Termination on Each Coding Pass    : %s\n", TerminationOnEachCodingPass ? "yes" : "no" );
+    print_with_indent(indentlevel, "Causal Context                     : %s\n", CausalContext ? "yes" : "no" );
+    print_with_indent(indentlevel, "Predictable Termination            : %s\n", PredictableTermination ? "yes" : "no" );
+    print_with_indent(indentlevel, "Segmentation Symbols               : %s\n", SegmentationSymbolsAreUsed ? "yes" : "no" );
+    print_with_indent(indentlevel, "Wavelet Transformation X axis      : %s\n", sTransformationX );
+    print_with_indent(indentlevel, "Wavelet Transformation Y axis      : %s\n", sTransformationY );
+    print_with_indent(indentlevel, "Wavelet Transformation Z axis      : %s\n", sTransformationZ );
+
+    if( VariablePrecinctSize )
+      {
+      uint_fast8_t i;
+      for( i = 0; i <= NumberOfDecompositionLevelsXaxis; ++i )
+        {
+        uint16_t val;
+        cread16((char*)p,&val);
+        p+=2;
+        /* Table A.9 - Precinct width, height and depth for the SPcod and SPcoc parameters, extended */
+        uint8_t width = val & 0x000f;
+        uint8_t height = (val & 0x00f0) >> 4;
+        uint8_t depth = (val & 0x0f00) >> 8;
+        print_with_indent(indentlevel, "  Precinct #%u Size Exponents         : %ux%ux%u\n", i, width, height, depth );
+        }
+      }
+    assert( p == end );
+    }
+  assert( p == end );
+  fprintf(fout, "\n" );
+}
+
+static void printnsi( FILE *stream, size_t len )
+{
+  char buffer[512];
+  assert( len < 512 );
+  size_t r = fread( buffer, sizeof(char), len, stream);
+  assert( r == len );
+
+  const uint8_t *p = (const uint8_t*)buffer;
+  const uint8_t *end = p + len;
+
+  uint8_t ndims = *p++;
+  uint32_t zsiz;
+  uint32_t zosiz;
+  uint32_t ztsiz;
+  uint32_t ztosiz;
+  uint8_t zrsiz;
+  cread32(p, &zsiz); p+=4;
+  cread32(p, &zosiz); p+=4;
+  cread32(p, &ztsiz); p+=4;
+  cread32(p, &ztosiz); p+=4;
+  cread8(p, &zrsiz); p+=1;
+  const char t1[] = "Dim #";
+  const char t2[] = "Reference Grid Size";
+  const char t3[] = "Image Offset";
+  const char t4[] = "Reference Tile Size";
+  const char t5[] = "Reference Tile Offset";
+  const char t6[] = "Components";
+
+  fprintf(fout, "\n" );
+  print_with_indent(indentlevel, "  %-32s : %u\n", t1, ndims );
+  print_with_indent(indentlevel, "  %-32s : %u\n", t2, zsiz );
+  print_with_indent(indentlevel, "  %-32s : %u\n", t3, zosiz );
+  print_with_indent(indentlevel, "  %-32s : %u\n", t4, ztsiz );
+  print_with_indent(indentlevel, "  %-32s : %u\n", t5, ztosiz );
+  print_with_indent(indentlevel, "  %-32s : %u\n", t6, zrsiz );
+
+  assert( p == end );
+}
+
+static void printcap( FILE *stream, size_t len )
+{
+  char buffer[512];
+  assert( len < 512 );
+  size_t r = fread( buffer, sizeof(char), len, stream);
+  assert( r == len );
+
+  cap = true;
+  const uint8_t *p = (const uint8_t*)buffer;
+  const uint8_t *end = p + len;
+
+  uint32_t pcap;
+  cread32((char*)p, &pcap);
+  p+=4;
+
+  fprintf(fout, "\n");
+  if(pcap)
+    {
+    uint16_t pcapval;
+    cread16((char*)p, &pcapval);
+    p+=2;
+    assert( pcapval == 0 );
+
+    int mask = 1;
+    int part = 31;
+    while(pcap)
+      {
+      if(pcap & mask)
+        {
+        fprintf(fout, "  Pcap: %x need part %d extension\n", pcap, part+1 );
+        }
+      pcap &= ~mask;
+      mask <<= 1;
+      part--;
+      assert( part >= 0);
       }
     }
 
@@ -806,30 +1094,68 @@ static void printcod( FILE *stream, size_t len )
 
 /* I.5.1 JPEG 2000 Signature box */
 static void printsignature( FILE * stream )
+  
 {
   uint32_t s;
   const uint32_t sig = 0xd0a870a;
   bool b = read32(stream, &s);
   assert( b );
-  fprintf(fout,"\n" );
   fprintf(fout,"  Corrupted: %s\n", s == sig ? "no" : "yes" );
+  fprintf(fout,"\n" );
 }
 
 static const char * getbrand( const char br[] )
 {
-  const char ref[] = "jp2\040";
-  if( strncmp( br, ref, 4 ) == 0 )
+  const char ref1[] = "jp2\040";
+  const char ref2[] = "jpx\040";
+  if( strncmp( br, ref1, 4 ) == 0 )
     {
     return "JP2";
     }
+  else if( strncmp( br, ref2, 4 ) == 0 )
+    {
+    return "JPX";
+    }
+  assert( 0 );
   return NULL;
+}
+
+typedef struct {
+  const char* symb;
+  const char* name;
+} compatentry;
+
+static const compatentry compatlist[] = {
+  { "jp2\040", "JPEG2000" },
+  { "J2P0"   , "JPEG2000,Profile 0" },
+  { "J2P1"   , "JPEG2000,Profile 1" },
+  { "jpxb"   , "JPEG2000-2,JPX" },
+  { "jpx "   , "JPEG2000-2" },
+  { 0, 0 }
+};
+
+static const char * getcompat( const char br[] )
+{
+  static const size_t n = sizeof( compatlist ) / sizeof( *compatlist ) - 1;
+  const compatentry * beg = compatlist;
+  const compatentry * end = compatlist + n;
+  const compatentry * p = beg;
+  for( ; p != end; ++p )
+    {
+    if( strncmp( br, p->symb, 4 ) == 0 )
+      return p->name;
+    }
+  //assert( 0 ); // file5.jp2
+  assert( end->symb == 0 );
+  return end->name;
 }
 
 /* I.7.1 XML boxes */
 static void printxml( FILE * stream, size_t len )
 {
-  fprintf(fout, "\n" );
-  fprintf(fout, "Data:\n" );
+//  fprintf(fout, "\n" );
+  print_with_indent(indentlevel, "Data:\n" );
+  print_with_indent(indentlevel, "" );
   for( ; len != 0; --len )
     {
     int val = fgetc(stream);
@@ -859,10 +1185,9 @@ static void printfiletype( FILE * stream, size_t len )
 
   /* Table I.3 - Legal Brand values */
   const char *brand = getbrand( br );
-  fprintf(fout,"\n" );
   if( brand )
     {
-    fprintf(fout,"  Brand: %s\n", brand );
+    fprintf(fout,"  Brand        : %s\n", brand );
     }
   else
     {
@@ -873,14 +1198,15 @@ static void printfiletype( FILE * stream, size_t len )
   fprintf(fout,"  Minor version: %u\n", minv );
   int i;
   fprintf(fout,"  Compatibility: " );
+  brand = NULL; // hack
   for (i = 0; i < n; ++i )
     {
     if( i ) fprintf(fout, " " );
     fread(br,4,1,stream); assert( b );
-    const char *brand = getbrand( br );
-    if( brand )
+    const char *compat = getcompat( br );
+    if( compat )
       {
-      fprintf(fout,"%s", brand );
+      fprintf(fout,"%s", compat );
       }
     else
       {
@@ -889,7 +1215,275 @@ static void printfiletype( FILE * stream, size_t len )
       fprintf(fout,"0x%08x", bswap_32(v) );
       }
     }
-    fprintf(fout, "\n" );
+  fprintf(fout, "\n" );
+  fprintf(fout, "\n" );
+}
+
+static void printresc( FILE * stream , size_t len )
+{
+  len -= 8;
+  assert( len == 10 );
+  bool b;
+  uint16_t VRcN;
+  uint16_t VRcD;
+  uint16_t HRcN;
+  uint16_t HRcD;
+  uint8_t VRcE;
+  uint8_t HRcE;
+
+  // Table I.20 – Format of the contents of the Capture Resolution box
+  b = read16(stream, &VRcN); assert( b );
+  b = read16(stream, &VRcD); assert( b );
+  b = read16(stream, &HRcN); assert( b );
+  b = read16(stream, &HRcD); assert( b );
+  b = read8(stream, &VRcE); assert( b );
+  b = read8(stream, &HRcE); assert( b );
+
+  print_with_indent(indentlevel, "Resolution: %d/%d*10^%d x %d/%d*10^%d\n",
+    VRcN,
+    VRcD,
+    VRcE,
+    HRcN,
+    HRcD,
+    HRcE);
+  fprintf(fout, "\n" );
+}
+
+static void printresd( FILE * stream , size_t len )
+{
+  len -= 8;
+  assert( len == 10 );
+  bool b;
+  uint16_t VRcN;
+  uint16_t VRcD;
+  uint16_t HRcN;
+  uint16_t HRcD;
+  uint8_t VRcE;
+  uint8_t HRcE;
+
+  // Table I.20 – Format of the contents of the Capture Resolution box
+  b = read16(stream, &VRcN); assert( b );
+  b = read16(stream, &VRcD); assert( b );
+  b = read16(stream, &HRcN); assert( b );
+  b = read16(stream, &HRcD); assert( b );
+  b = read8(stream, &VRcE); assert( b );
+  b = read8(stream, &HRcE); assert( b );
+
+  print_with_indent(indentlevel, "Resolution: %d/%d*10^%d x %d/%d*10^%d\n",
+    VRcN,
+    VRcD,
+    VRcE,
+    HRcN,
+    HRcD,
+    HRcE);
+  fprintf(fout, "\n" );
+}
+
+static void printres( FILE * stream , size_t fulllen )
+{
+  fulllen -= 8;
+  while( fulllen )
+    {
+    uint32_t len;
+    bool b = read32(stream, &len);
+    assert( b );
+    assert( fulllen >= len );
+    fulllen -= len;
+    uint32_t marker;
+    b = read32(stream, &marker);
+    assert( b );
+    const off_t pos = ftello( stream );
+
+    const dictentry2 *d = getdictentry2frommarker( marker );
+    print_with_indent(indentlevel, "%-8d: Sub Box: \"%s\" %s\n",pos-8, d->shortname, d->longname );
+    indentlevel += 2;
+    switch( marker )
+      {
+    case RESC:
+      printresc( stream, len );
+      break;
+    case RESD:
+      printresd( stream, len );
+      break;
+    default:
+      assert( 0 ); /* TODO */
+      }
+    indentlevel -= 2;
+    }
+  fprintf(fout, "\n" );
+}
+
+static void printlabel( FILE * stream , size_t len )
+{
+  len -= 8;
+  assert( len < 20 );
+  char buf[20+1];
+  fread( buf, 1, len, stream );
+  buf[len] = 0;
+  print_with_indent(indentlevel, "Content : %s\n", buf );
+  //(void)fseeko(stream, len - 8, SEEK_CUR);
+  fprintf(fout, "\n" );
+}
+
+static void printrreq( FILE * stream , size_t len )
+{
+  (void)fseeko(stream, len, SEEK_CUR);
+}
+
+static void printasoc( FILE * stream , size_t fulllen )
+{
+  while( fulllen )
+    {
+    uint32_t len;
+    bool b = read32(stream, &len);
+    assert( b );
+    assert( fulllen >= len );
+    fulllen -= len;
+    uint32_t marker;
+    b = read32(stream, &marker);
+    assert( b );
+    const off_t pos = ftello( stream );
+
+    const dictentry2 *d = getdictentry2frommarker( marker );
+    //    fprintf(fout, "\n" );
+    print_with_indent(indentlevel, "%-8d: Sub Box: \"%s\" %s\n",pos-8, d->shortname, d->longname );
+    indentlevel += 2;
+    switch( marker )
+      {
+    case LBL:
+      printlabel( stream, len );
+      break;
+    case ASOC:
+      printasoc( stream, len - 8 );
+      break;
+    case XML:
+      printxml( stream, len - 8 );
+      break;
+    default:
+      assert( 0 ); /* TODO */
+      }
+    indentlevel -= 2;
+    }
+}
+
+static void printurl( FILE * stream , size_t len )
+{
+  len -= 8;
+  //(void)fseeko(stream, len, SEEK_CUR);
+  // Table I.25 – Data Entry URL box contents data structure values
+  uint8_t VERS;
+  bool b;
+  b = read8(stream, &VERS); assert( b );
+  len -= 1;
+  char FLAGS[3];
+  b = read8(stream, FLAGS+0); assert( b );
+  b = read8(stream, FLAGS+1); assert( b );
+  b = read8(stream, FLAGS+2); assert( b );
+  len -= 3;
+  print_with_indent( indentlevel, "Version: %d\n", VERS );
+  print_with_indent( indentlevel, "Flags: 0x%02x%02x%02x\n", FLAGS[0],FLAGS[1],FLAGS[2]);
+  print_with_indent( indentlevel, "URL: " );
+  for( ; len != 0; len-- )
+    {
+    int val = fgetc(stream);
+    if( val )
+    fprintf(fout, "%c", val );
+    }
+  fprintf(fout, "\n" );
+  fprintf(fout, "\n" );
+}
+
+static void printulst( FILE * stream , size_t len )
+{
+  len -= 8;
+  // Table I.24 – UUID List box contents data structure values
+  uint16_t NU;
+  int i;
+  int uid;
+  bool b;
+  b = read16(stream, &NU); assert( b );
+  len -= 2;
+  for( uid = 0; uid < NU; ++uid )
+    {
+    // 128 bits:
+    assert( len == 16 );
+    char buf[16+1];
+    size_t r = fread( buf, sizeof(char), 16, stream);
+    assert( r == 16 );
+    buf[16] = 0;
+    print_with_indent(indentlevel, "UUID #%d:", uid);
+    for( i = 0; i < 16; ++i )
+      {
+      fprintf(fout, " %02x", buf[i] & 0xff );
+      }
+  fprintf(fout, "\n" );
+    }
+  fprintf(fout, "\n" );
+}
+
+static void printuinf( FILE * stream , size_t fulllen )
+{
+  fulllen -= 8;
+  while( fulllen )
+    {
+    uint32_t len;
+    bool b = read32(stream, &len);
+    assert( b );
+    assert( fulllen >= len );
+    fulllen -= len;
+    uint32_t marker;
+    b = read32(stream, &marker);
+    assert( b );
+    const off_t pos = ftello( stream );
+
+    const dictentry2 *d = getdictentry2frommarker( marker );
+    print_with_indent(indentlevel, "%-8d: Sub Box: \"%s\" %s\n",pos-8, d->shortname, d->longname );
+    indentlevel += 2;
+    switch( marker )
+      {
+    case ULST:
+      printulst( stream, len );
+      break;
+    case URL:
+      printurl( stream, len );
+      break;
+    default:
+      assert( 0 ); /* TODO */
+      }
+    indentlevel -= 2;
+    }
+  fprintf(fout, "\n" );
+}
+
+static void printuuid( FILE * stream , size_t len )
+{
+  int i;
+  print_with_indent(indentlevel, "UUID      :" );
+  len -= 8;
+  for(i = 0; i < 16;  ++i, --len )
+    {
+    int val = fgetc(stream);
+    fprintf(fout, " %02x", val );
+    }
+  fprintf(fout, "\n" );
+  print_with_indent(indentlevel, "UUID Data :\n" );
+#ifdef MYTIFF
+  FILE *tiff = fopen( "/tmp/my.tif", "wb" );
+#endif
+  for( i = 0; len != 0; --len, ++i )
+    {
+    if( i % 16 == 0 ) fprintf( fout, "\n  " );
+    int val = fgetc(stream);
+    fprintf(fout, "%02x ", val );
+#ifdef MYTIFF
+    fprintf(tiff, "%c", val );
+#endif
+    }
+#ifdef MYTIFF
+  fclose( tiff );
+#endif
+  fprintf(fout, "\n" );
+  fprintf(fout, "\n" );
 }
 
 /* I.5.3.1 Image Header box */
@@ -914,15 +1508,15 @@ static void printimageheaderbox( FILE * stream , size_t fulllen )
   b = read8(stream, &IPR); assert( b );
 
   const bool sign = bpc >> 7;
+  print_with_indent(indentlevel, "Height               : %u\n", height );
+  print_with_indent(indentlevel, "Width                : %u\n", width);
+  print_with_indent(indentlevel, "Components           : %u\n", nc);
+  print_with_indent(indentlevel, "Bits Per Component   : %u\n", (bpc & 0x7f) + 1);
+  print_with_indent(indentlevel, "Signed Components    : %s\n", sign ? "yes" : "no" );
+  print_with_indent(indentlevel, "Compression Type     : %s\n", c == 7 ? "wavelet" : "holly crap");
+  print_with_indent(indentlevel, "Unknown Colourspace  : %s\n", Unk ? "yes" : "no");
+  print_with_indent(indentlevel, "Intellectual Property: %s\n", IPR ? "yes" : "no");
   fprintf(fout,"\n" );
-  print_with_indent(indentlevel, "  Height: %u\n", height );
-  print_with_indent(indentlevel, "  Width: %u\n", width);
-  print_with_indent(indentlevel, "  Components: %u\n", nc);
-  print_with_indent(indentlevel, "  Bits Per Component: %u\n", (bpc & 0x7f) + 1);
-  print_with_indent(indentlevel, "  Signed Components: %s\n", sign ? "yes" : "no" );
-  print_with_indent(indentlevel, "  Compression Type: %s\n", c == 7 ? "wavelet" : "holly crap");
-  print_with_indent(indentlevel, "  Unknown Colourspace: %s\n", Unk ? "yes" : "no");
-  print_with_indent(indentlevel, "  Intellectual Property: %s\n", IPR ? "yes" : "no");
 }
 
 static void printcmap( FILE *stream, size_t len )
@@ -945,7 +1539,7 @@ static void printcmap( FILE *stream, size_t len )
     b = read8(stream, &PCOLi); assert( b );
     len--;
     fprintf(fout, "  Component      #%d: %u\n", i, CMPi );
-    fprintf(fout, "  Mapping Type   #%d: %s\n", i, MTYPi ? "palette mapping" : "wazzza" );
+    fprintf(fout, "  Mapping Type   #%d: %s\n", i, MTYPi ? "palette mapping" : "direct use" );
     fprintf(fout, "  Palette Column #%d: %u\n", i, PCOLi );
     }
   assert( len == 0 );
@@ -1006,16 +1600,16 @@ static void printcdef( FILE *stream, size_t len )
   uint16_t cni;
   uint16_t typi;
   uint16_t asoci;
-  fprintf(fout,"\n" );
   for (i = 0; i < N; ++i )
     {
     b = read16(stream, &cni); assert( b );
     b = read16(stream, &typi); assert( b );
     b = read16(stream, &asoci); assert( b );
-    print_with_indent(indentlevel,"  Channel     #%u: %x\n", i, cni );
-    print_with_indent(indentlevel,"  Type        #%u: %s\n", i, typi == 0 ? "color" : "donno" );
-    print_with_indent(indentlevel,"  Association #%u: %x\n", i, asoci );
+    print_with_indent(indentlevel,"Channel     #%u: %x\n", i, cni );
+    print_with_indent(indentlevel,"Type        #%u: %s\n", i, typi == 0 ? "color" : "donno" );
+    print_with_indent(indentlevel,"Association #%u: %x\n", i, asoci );
     }
+  fprintf(fout,"\n" );
 }
 
 /* I.5.3.3 Colour Specification box */
@@ -1024,25 +1618,31 @@ static void printcolourspec( FILE *stream, size_t len )
   len -= 8;
 
   uint8_t meth;
-  uint8_t prec;
+  int8_t prec;
   uint8_t approx;
   uint32_t enumCS = 0;
   bool b;
   b = read8(stream, &meth); assert( b );
   b = read8(stream, &prec); assert( b );
   b = read8(stream, &approx); assert( b );
+  len -= 3;
+  if( meth == 3 )
+    {
+    assert( 0 );
+    (void)fseeko(stream, len, SEEK_CUR);
+    return;
+    }
   assert( meth == 1 || meth == 2 );
   if( meth == 1 )
     {
-    assert( len == 7 );
     b = read32(stream, &enumCS); assert( b );
-    len-=4;
+    len -= 4;
     }
-  len--;
-  len--;
-  len--;
+  if( len != 0 )
+    {
+    (void)fseeko(stream, len, SEEK_CUR);
+    }
 
-  fprintf(fout,"\n");
   const char *smeth = "reserved";
   switch( meth )
     {
@@ -1053,8 +1653,7 @@ static void printcolourspec( FILE *stream, size_t len )
       smeth = "restricted ICC profile";
       break;
     }
-  const char *senumCS = "reserved";
-  char buffer[512];
+  const char *senumCS = NULL;
   switch( enumCS )
     {
   case 16:
@@ -1066,21 +1665,24 @@ static void printcolourspec( FILE *stream, size_t len )
   case 18:
     senumCS = "YCC";
     break;
-  default:
-    sprintf(buffer, "unknown (%d)", enumCS );
-    senumCS = buffer;
     }
-  print_with_indent(indentlevel,"  Colour Specification Method: %s\n", smeth);
-  print_with_indent(indentlevel,"  Precedence: %u\n", prec);
-  print_with_indent(indentlevel,"  Approximation: %u\n", approx);
+  print_with_indent(indentlevel,"Colour Specification Method: %s\n", smeth);
+  print_with_indent(indentlevel,"Precedence   :  %u\n", prec);
+  print_with_indent(indentlevel,"Approximation:  %u\n", approx);
   if( meth == 1 )
     {
-    print_with_indent(indentlevel,"  Colourspace: %s\n", senumCS);
-    assert( len == 0);
+    if( len == 0 )
+      {
+      print_with_indent(indentlevel,"Colourspace  : %s\n", senumCS);
+      }
+    else
+      {
+      print_with_indent(indentlevel,"invalid box\n");
+      }
     }
   else if( meth == 2 )
     {
-    fprintf(fout,"  ICC Colour Profile:" );
+    print_with_indent(indentlevel,"ICC Colour Profile:" );
     assert( len != 0 );
     size_t i;
     for( i = 0; i < len; ++i )
@@ -1106,10 +1708,11 @@ static void printheaderbox( FILE * stream , size_t fulllen )
     uint32_t marker;
     b = read32(stream, &marker);
     assert( b );
+    const off_t pos = ftello( stream );
 
     const dictentry2 *d = getdictentry2frommarker( marker );
-    fprintf(fout, "\n" );
-    fprintf(fout, "  Sub box: \"%s\" (%s)\n", d->shortname, d->longname );
+    print_with_indent(indentlevel, "%-8d: Sub Box: \"%s\" %s\n",pos-8, d->shortname, d->longname );
+    indentlevel += 2;
     switch( marker )
       {
     case IHDR:
@@ -1127,26 +1730,32 @@ static void printheaderbox( FILE * stream , size_t fulllen )
     case PCLR:
       printpclr( stream, len );
       break;
+    case RES:
+      printres( stream, len );
+      break;
     default:
       assert( 0 ); /* TODO */
       }
+    indentlevel -= 2;
     }
+  fprintf(fout,"\n" );
 }
 
 static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
 {
   const dictentry2 *d = getdictentry2frommarker( marker );
   (void)len;
-  fprintf(fout, "\n" );
+  const off_t pos = ftello( stream );
+  //fprintf(fout, "\n" );
   if( d->shortname )
-    fprintf(fout, "New box: \"%s\" (%s)\n", d->shortname, d->longname );
+    fprintf(fout, "%-8d: New Box: \"%s\" %s\n", pos - 8, d->shortname, d->longname );
   else
     {
     char buffer[4+1];
     uint32_t swap = bswap_32( marker );
     memcpy( buffer, &swap, 4);
     buffer[4] = 0;
-    fprintf(fout, "New box: \"%s\" (unknown box)\n", buffer );
+    fprintf(fout, "%-8d: New Box: \"%s\" (unknown box)\n",pos-8, buffer );
     fprintf(fout, "\n  " );
     len -= 8;
     for( ; len != 0; --len )
@@ -1154,12 +1763,13 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
       int val = fgetc(stream);
       fprintf(fout, "%02x ", val );
       }
-      fprintf(fout, "\n" );
+    fprintf(fout, "\n" );
     return false;
     }
 
   bool skip = false;
   assert( len >= 8 || (marker == JP2C && len == 0 ) );
+  indentlevel += 2;
   switch( marker )
     {
   case JP:
@@ -1174,9 +1784,28 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
   case JP2H:
     printheaderbox( stream, len - 8 );
     break;
+  case UINF:
+    printuinf( stream, len );
+    break;
+  case UUID:
+    printuuid( stream, len );
+    break;
+  case ASOC:
+    printasoc( stream, len - 8 );
+    break;
+  case RREQ:
+    printrreq( stream, len - 8 );
+    break;
+  case CMAP:
+    printcmap( stream, len );
+    break;
+  case JP2C:
+    indentlevel += 2;
   default:
+    fprintf(fout, "\n" );
     skip = true;
     }
+  indentlevel -= 2;
 
   return skip;
 }
@@ -1210,7 +1839,9 @@ static void printsiz( FILE *stream, size_t len )
   b = read32(stream, &ytosiz); assert( b );
   b = read16(stream, &csiz); assert( b );
 
+  // Table A-10 - Capability Rsiz parameter
   const char *s = "Reserved";
+  const uint16_t part2mask = 0xf000;
   switch( rsiz )
     {
   case 0x0:
@@ -1222,6 +1853,12 @@ static void printsiz( FILE *stream, size_t len )
   case 0x2:
     s = "JPEG2000 profile 1";
     break;
+  default:
+    // Part 2 - Table A.2 - Capability Rsiz parameter, extended
+    if( (rsiz & part2mask) == 0x8000 )
+      {
+      s = "JPEG2000 part 2";
+      }
     }
   fprintf(fout, "\n" );
   const char t1[] = "Required Capabilities";
@@ -1230,12 +1867,12 @@ static void printsiz( FILE *stream, size_t len )
   const char t4[] = "Reference Tile Size";
   const char t5[] = "Reference Tile Offset";
   const char t6[] = "Components";
-  print_with_indent(indentlevel, "  %-32s : %s\n"   , t1, s );
-  print_with_indent(indentlevel, "  %-32s : %ux%u\n", t2, xsiz, ysiz );
-  print_with_indent(indentlevel, "  %-32s : %ux%u\n", t3, xosiz, yosiz );
-  print_with_indent(indentlevel, "  %-32s : %ux%u\n", t4, xtsiz, ytsiz );
-  print_with_indent(indentlevel, "  %-32s : %ux%u\n", t5, xtosiz, ytosiz );
-  print_with_indent(indentlevel, "  %-32s : %u\n"   , t6, csiz );
+  print_with_indent(indentlevel, "%-30s : %s\n"   , t1, s );
+  print_with_indent(indentlevel, "%-30s : %ux%u\n", t2, xsiz, ysiz );
+  print_with_indent(indentlevel, "%-30s : %ux%u\n", t3, xosiz, yosiz );
+  print_with_indent(indentlevel, "%-30s : %ux%u\n", t4, xtsiz, ytsiz );
+  print_with_indent(indentlevel, "%-30s : %ux%u\n", t5, xtosiz, ytosiz );
+  print_with_indent(indentlevel, "%-30s : %u\n"   , t6, csiz );
 
   const char t7[] = "Depth";
   const char t8[] = "Signed";
@@ -1250,12 +1887,13 @@ static void printsiz( FILE *stream, size_t len )
     b = read8(stream, &yrsiz); assert( b );
     char buffer[50];
     sprintf( buffer, "Component #%u %s", (unsigned)i, t7 );
-    print_with_indent(indentlevel, "  %-33s: %u\n"   , buffer, (ssiz & 0x7f) + 1 );
+    print_with_indent(indentlevel, "%-31s: %u\n"   , buffer, (ssiz & 0x7f) + 1 );
     sprintf( buffer, "Component #%u %s", (unsigned)i, t8 );
-    print_with_indent(indentlevel, "  %-33s: %s\n"   , buffer, sign ? "yes" : "no" );
+    print_with_indent(indentlevel, "%-31s: %s\n"   , buffer, sign ? "yes" : "no" );
     sprintf( buffer, "Component #%u %s", (unsigned)i, t9 );
-    print_with_indent(indentlevel, "  %-33s: %ux%u\n", buffer, xrsiz, yrsiz );
+    print_with_indent(indentlevel, "%-31s: %ux%u\n", buffer, xrsiz, yrsiz );
     }
+  fprintf(fout, "\n" );
 }
 
 static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
@@ -1276,13 +1914,15 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
     rel_offset = offset;
     ++init;
     }
+  rel_offset = 0;
   const dictentry *d = getdictentryfrommarker( marker );
   assert( offset >= 0 );
-  assert( d->shortname );
-  fprintf(fout, "\n" );
+  assert( d->shortname && marker );
   print_with_indent( indentlevel, "%-8u: New marker: %s (%s)",
     offset - rel_offset, d->shortname, d->longname );
   fprintf(fout,"\n");
+  indentlevel += 2;
+  bool skip = false;
   switch( marker )
     {
   case EOC:
@@ -1290,45 +1930,61 @@ static bool print1( uint_fast16_t marker, size_t len, FILE *stream )
     break;
   case RGN:
     printrgn( stream, len );
-    return false;
+    break;
   case POC:
     printpoc( stream, len );
-    return false;
+    break;
   case QCC:
     printqcc( stream, len );
-    return false;
+    break;
   case QCD:
     printqcd( stream, len );
-    return false;
+    break;
   case SIZ:
     printsiz( stream, len );
-    return false;
+    break;
   case EPH:
     printeph( stream, len );
-    return false;
+    break;
   case SOP:
     printsop( stream, len );
-    return false;
+    break;
   case SOD:
     printsod( stream, len );
-    return false;
+    break;
   case SOT:
     printsot( stream, len );
-    return false;
+    break;
   case COM:
     printcomment( stream, len );
-    return false;
+    break;
+  case PLT:
+    printplt( stream, len );
+    break;
+  case PPM:
+    printppm( stream, len );
+    break;
   case TLM:
     printtlm( stream, len );
-    return false;
+    break;
   case COC:
     printcoc( stream, len );
-    return false;
+    break;
+  case NSI:
+    printnsi( stream, len );
+    break;
+  case CAP:
+    printcap( stream, len );
+    break;
   case COD:
     printcod( stream, len );
-    return false;
+    break;
+  default:
+    skip = true;
+    fprintf(fout, "\n" );
     }
-  return true;
+  indentlevel -= 2;
+  return skip;
 }
 
 int main(int argc, char *argv[])
@@ -1351,6 +2007,7 @@ int main(int argc, char *argv[])
   file_size = getfilesize( filename );
   if( isjp2file( filename ) )
     {
+#if 0
     fprintf(fout,"###############################################################\n" );
     fprintf(fout,"# JP2 file format log file generated by jp2file.py            #\n" );
     fprintf(fout,"# jp2file.py is copyrighted (c) 2001,2002                     #\n" );
@@ -1358,8 +2015,16 @@ int main(int argc, char *argv[])
     fprintf(fout,"#                                                             #\n" );
     fprintf(fout,"# http://www.av-technology.de/ jpeg2000@av-technology.de      #\n" );
     fprintf(fout,"###############################################################\n" );
+#else
+    fprintf(fout, "###############################################################\n" );
+    fprintf(fout, "# JP2 file format log file generated by jp2file.py            #\n" );
+    fprintf(fout, "# jp2file.py is copyrighted (c) 2001-2009                     #\n" );
+    fprintf(fout, "# by Pegasus Imaging Corporation                              #\n" );
+    fprintf(fout, "###############################################################\n" );
+    fprintf(fout, "\n" );
+#endif
 
-    indentlevel = 2;
+    indentlevel = 0;
     b = parsejp2( filename, &print2, &print1 );
     }
   else

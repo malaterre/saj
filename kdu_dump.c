@@ -772,7 +772,7 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
 {
   bool skip = false;
   (void)len;
-  if( false )
+  if( true )
     {
     }
   else

@@ -55,6 +55,8 @@ static const dictentry2 dict2[] = {
   { PCLR, "pclr", "Palette" },
   { RES , "res", "Resolution" },
 //  { IPTR, "iptr", "Unknown" }, /* FIXME */
+  { MDAT , "mdat", "Media Data" },
+  { MOOV , "moov", "Movie" },
 
   { 0, 0, 0 }
 };
@@ -697,7 +699,6 @@ static bool print2( uint_fast32_t marker, size_t len, FILE *stream )
     buffer[4] = 0;
     printstring( "\tGROUP = ", buffer );
     fprintf(fout,"\t\tName = %s\n", "Unknown" );
-
     }
 	fprintf(fout,"\t\tType = 16#%X#\n", (uint32_t)marker );
 	fprintf(fout,"\t\t^Position = %td <byte offset>\n", offset - 8 );

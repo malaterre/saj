@@ -813,7 +813,7 @@ class JPEG_COD_Parameters {
   unsigned char Scod;
   bool VariablePrecinctSize;
   bool SOPMarkerSegments;
-  bool EPHMarkerSegments;
+  bool EPHPMarkerSegments;
   
   unsigned char ProgressionOrder;
   const char *descriptionOfProgressionOrder;
@@ -845,7 +845,7 @@ public:
       Scod = buffer[0];
       VariablePrecinctSize = (Scod & 0x01) != 0;
       SOPMarkerSegments    = (Scod & 0x02) != 0;
-      EPHMarkerSegments   = (Scod & 0x04) != 0;
+      EPHPMarkerSegments   = (Scod & 0x04) != 0;
 
       ProgressionOrder = buffer[1];
       descriptionOfProgressionOrder = getDescriptionOfProgressionOrder(ProgressionOrder);
@@ -888,7 +888,7 @@ public:
 
       out << "\t\t\t Precinct size "          << (VariablePrecinctSize ? "defined for each resolution level" : "PPx = 15 and PPy = 15") << std::endl;
       out << "\t\t\t SOPMarkerSegments = "  << (SOPMarkerSegments    ? "may be"   : "not") << " used" << std::endl;
-      out << "\t\t\t EPHMarkerSegments = "  << (EPHMarkerSegments   ? "shall be" : "not") << " used" << std::endl;
+      out << "\t\t\t EPHPMarkerSegments = "  << (EPHPMarkerSegments   ? "shall be" : "not") << " used" << std::endl;
 
       out << "\t\t ProgressionOrder = "; writeZeroPaddedHexNumber(out,ProgressionOrder,1); out << " (" << descriptionOfProgressionOrder << " progression)" << std::endl;
       out << "\t\t NumberOfLayers = "      << NumberOfLayers << std::endl;
