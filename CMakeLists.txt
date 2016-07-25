@@ -275,3 +275,5 @@ endforeach(jp2file)
 #  #INSTALL_NAME_DIR "@executable_path/../../../Library/Frameworks"
 #  DEBUG_POSTFIX -d
 #)
+
+add_executable(getlossy getlossy.c)
