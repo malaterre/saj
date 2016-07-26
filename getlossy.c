@@ -166,61 +166,49 @@ static inline bool read64(const char ** input, size_t * len, uint64_t * ret)
 }
 
 
-static bool parsej2k_imp( const char * const stream, const size_t file_size )
+static bool parsej2k_imp( const char * const stream, const size_t file_size, bool * lossless )
 {
   uint16_t marker;
   uintmax_t sotlen = 0;
   size_t lenmarker;
-  //size_t cur = 0;
   const char * cur = stream;
   size_t cur_size = file_size;
+  *lossless = false; // default init
   while( read16(&cur, &cur_size, &marker) )
     {
-    bool b;
-    assert( marker ); /* debug */
-    b = hasnolength( marker );
-    if ( !b )
+    if ( !hasnolength( marker ) )
       {
       uint16_t l;
       bool r = read16( &cur, &cur_size, &l );
-      if( !r ) return false;
-      assert( l >= 2 );
+      if( !r || l < 2 )
+{
+        printf( "  break %lu %d %d\n", cur_size, r, l);
+        break;
+}
       lenmarker = (size_t)l - 2;
 
-      /* special book keeping */
       if( marker == COD )
         {
-        const char * p = cur;
-        uint8_t Scod = *p++;
-        uint8_t ProgressionOrder = *p++;
-        (char)*p++;
-        (char)*p++;
-        //uint16_t NumberOfLayers = bswap_16( u16.v );
-        uint8_t MultipleComponentTransformation = *p++;
-        uint8_t NumberOfDecompositionLevels = *p++;
-        uint8_t CodeBlockWidth = *p++;
-        uint8_t CodeBlockHeight = *p++;
-        uint8_t CodeBlockStyle = *p++;
-        uint8_t Transformation = *p++;
+        const uint8_t Transformation = *(cur+9);
         printf( "%d\n", Transformation );
+        if( Transformation == 0x0 ) { *lossless = false; return true; }
+        else if( Transformation == 0x1 ) *lossless = true;
+        else return false;
         }
       else if( marker == SOT )
         {
-        break;
         }
+      printf( "  %d %ud\n", lenmarker, cur_size );
+      cur += lenmarker; cur_size -= lenmarker;
       }
-    else
-      {
-      lenmarker = 0;
-      }
-    printf( "%x %lu\n", marker, lenmarker );
-    cur += lenmarker; cur_size -= lenmarker;
+      else if( marker == SOD )
+        return true;
     }
 
-  return true;
+  return false;
 }
 
-static bool parsejp2_imp( const char * const stream, const size_t file_size )
+static bool parsejp2_imp( const char * const stream, const size_t file_size, bool * lossless )
 {
   uint32_t marker;
   uint64_t len64; /* ref */
@@ -231,7 +219,7 @@ static bool parsejp2_imp( const char * const stream, const size_t file_size )
   while( read32(&cur, &cur_size, &len32) )
     {
     bool b = read32(&cur, &cur_size, &marker);
-    assert( b );
+    if( !b ) break;
     len64 = len32;
     if( len32 == 1 ) /* 64bits ? */
       {
@@ -241,65 +229,29 @@ static bool parsejp2_imp( const char * const stream, const size_t file_size )
       }
     if( marker == JP2C )
       {
-      const size_t start = cur - stream; //ftello(stream);
+      const size_t start = cur - stream;
       if( !len64 )
         {
         len64 = (size_t)(file_size - start + 8);
         }
       assert( len64 >= 8 );
-#if 0
-      if( printfun2( marker, len64, stream ) )
-        {
-        bool bb;
-        assert( len64 - 8 < file_size ); /* jpeg codestream cant be longer than jp2 file */
-        bb = parsej2k_imp( stream, printfun, len64 - 8 /*file_size*/ );
-        if( !bb )
-          {
-          fprintf( stderr, "*** unexpected end of codestream\n" );
-          return false;
-          }
-        assert ( bb );
-        }
-#else
-        bool bb = parsej2k_imp( cur, cur_size );
-#endif
-      /*const off_t end = ftello(stream);*/
-      //assert( ftello(stream) - start == (off_t)(len64 - 8) );
-      /* done with JP2C move on to remaining (trailing) stuff */
-      break;
+      printf( "debug %d\n", len64 - 8 );
+      return parsej2k_imp( cur, len64 - 8 /*cur_size*/, lossless );
       }
 
-#if 0
-    assert( len64 >= 8 );
-    if( !(len64 - 8 < file_size) ) /* jpeg codestream cant be longer than jp2 file */
-      {
-      return false;
-      }
-    if( printfun2( marker, len64, stream ) )
-      {
       const size_t lenmarker = len64 - 8;
-      int v = fseeko(stream, (off_t)lenmarker, SEEK_CUR);
-      assert( v == 0 );
-      }
+#if 1
+      union { uint32_t v; char bytes[4]; } u;
+      u.v = marker;
+      char dest[5];
+      memcpy(dest, u.bytes, 4 );
+      dest[4] = 0;
+      printf( "%s %x %d\n", dest, marker, lenmarker );
 #endif
-      const size_t lenmarker = len64 - 8;
-  union { uint32_t v; char bytes[4]; } u;
-     u.v = marker;
-     char dest[5];
-     memcpy(dest, u.bytes, 4 );
-     dest[4] = 0;
-	printf( "%s %x %d\n", dest, marker, lenmarker );
-     cur += lenmarker;
+      cur += lenmarker;
     }
-#if 0
-  assert( feof(stream) );
-{
-  int v = fclose( stream );
-  assert( !v );
-}
-#endif
 
-  return true;
+  return false;
 }
 
 
@@ -317,10 +269,13 @@ int main(int argc, char * argv[])
   char * mem = malloc( flen );
   fread(mem, 1, flen, in );
   bool b = (unsigned char)*mem == 0xFF ? false : true;
+  bool lossless;
   if( b ) 
-  parsejp2_imp( mem, flen);
+  b = parsejp2_imp( mem, flen, &lossless);
   else
-  parsej2k_imp( mem, flen);
+  b = parsej2k_imp( mem, flen, &lossless);
+  if(!b) printf("failed to parse\n");
+  printf("lossless: %d\n", lossless);
   free(mem);
 
   fclose(in);
